@@ -48,7 +48,7 @@ export default function AdminDashboard() {
     const arrivalTime = school.arrivalTime || '08:30 AM - 09:00 AM';
     const qrPassUrl = `https://sujhc.site/qr?data=${regId}`;
     
-    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* 30 Max Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://sujhc.site* with Registration ID: *${regId}* to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
+    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* Unlimited Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://sujhc.site* with Registration ID: *${regId}* to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
   };
 
   // AI Predictor State
@@ -139,7 +139,7 @@ export default function AdminDashboard() {
         status: 'approved',
         registrationId: regId,
         qrCodeUrl: `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`,
-        quota: 30 // standard allotment
+        quota: 999999 // Unlimited allotment
       });
 
       // Submit an official notification audit
@@ -165,7 +165,7 @@ export default function AdminDashboard() {
             teacherInCharge: school.teacherInCharge,
             registrationId: regId,
             qrCodeUrl: qrPassUrl,
-            quota: 30, // standard allotment
+            quota: 999999, // Unlimited allotment
             preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
             arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
           }),
@@ -269,7 +269,7 @@ export default function AdminDashboard() {
           teacherInCharge: school.teacherInCharge,
           registrationId: regId,
           qrCodeUrl: qrPassUrl,
-          quota: 30, // standard allotment
+          quota: 999999, // Unlimited allotment
           preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
           arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
         }),
