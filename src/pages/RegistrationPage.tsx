@@ -259,13 +259,6 @@ export default function RegistrationPage() {
           </p>
         </div>
 
-        {/* DEMO BYPASS BANNER */}
-        <div className="mb-8 p-4 bg-blue-900/20 border border-blue-500/30 rounded-2xl flex items-start gap-3 backdrop-blur-md">
-          <Sparkles className="w-5 h-5 text-blue-400 shrink-0 mt-0.5 animate-pulse" />
-          <div className="text-xs text-slate-300 leading-relaxed">
-            <span className="font-bold text-white uppercase font-mono">Sandbox Demo Fast-Pass:</span> Want to test the School Portal immediately without waiting for Admin Approval? Use our pre-approved school ID <span className="font-mono text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded">SV26-0042</span> in the login on the <span className="underline cursor-pointer hover:text-white" onClick={() => navigate('/')}>Home Page</span>!
-          </div>
-        </div>
 
         <div className="grid md:grid-cols-12 gap-8 items-start">
           
@@ -313,7 +306,7 @@ export default function RegistrationPage() {
                           <input
                             type="text"
                             required
-                            placeholder="e.g. Jaffna Central College"
+                            placeholder="e.g. Jaffna Hindu College"
                             value={formData.name}
                             onChange={e => setFormData({...formData, name: e.target.value})}
                             className="w-full bg-slate-900/60 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm"

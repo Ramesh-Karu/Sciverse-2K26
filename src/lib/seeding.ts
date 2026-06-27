@@ -108,67 +108,67 @@ export async function seedInitialData() {
     }
 
     // 4. Seed Pre-approved schools for demonstration/testing
-    const schoolsColl = collection(db, 'schools');
-    const schoolsSnap = await getDocs(schoolsColl);
-    if (schoolsSnap.empty) {
-      const defaultSchoolId = 'demo-school-1';
-      const defaultSchool = {
-        name: "St. Patrick's College",
-        principalName: "Rev. Fr. A. P. Joseph",
-        teacherInCharge: "Mr. S. Daniel",
-        contact: "+94 77 123 4567",
-        email: "stpatricks@jhc.lk",
-        address: "St. Patrick's Road, Jaffna",
-        logoUrl: "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&q=80&w=200",
-        status: "approved",
-        registrationId: "SV26-0042",
-        qrCodeUrl: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=SV26-0042",
-        expectedStudents: 25,
-        expectedTeachers: 5,
-        preferredDay: "Day 2 - Exhibitions & Practical Labs (July 23)",
-        arrivalTime: "08:30 AM - 09:00 AM",
-        specialRequirements: "Wheelchair ramp access for 2 students",
-        quota: 30,
-        createdAt: new Date(Date.now() - 172800000).toISOString()
-      };
-
-      await setDoc(doc(db, 'schools', defaultSchoolId), defaultSchool);
-
-      // Seed mock participants for this school
-      const participants = [
-        { id: 'part-1', name: 'Niranjan Sivakumar', type: 'student', role: 'Grade 11 - Physical Science', contact: '+94 77 888 1111', competitions: ['Rocketry Challenge', 'Physics Quiz'], checkedIn: false },
-        { id: 'part-2', name: 'Jeyam Thanabalasingam', type: 'student', role: 'Grade 12 - Biology', contact: '+94 77 888 2222', competitions: ['Biology Olympiad'], checkedIn: false },
-        { id: 'part-3', name: 'Mr. S. Daniel', type: 'teacher', role: 'Senior Physics Instructor', contact: '+94 77 888 3333', competitions: [], checkedIn: false }
-      ];
-
-      for (const p of participants) {
-        await setDoc(doc(db, `schools/${defaultSchoolId}/participants`, p.id), {
-          schoolId: defaultSchoolId,
-          ...p
-        });
-      }
-
-      // Add another pending school to test approval flow
-      await setDoc(doc(db, 'schools', 'demo-school-2'), {
-        name: "Vembadi Girls' High School",
-        principalName: "Mrs. K. Anandaraja",
-        teacherInCharge: "Mrs. M. Pushparani",
-        contact: "+94 77 987 6543",
-        email: "vembadi@jhc.lk",
-        address: "Vembadi Road, Jaffna",
-        logoUrl: "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80&w=200",
-        status: "pending",
-        expectedStudents: 15,
-        expectedTeachers: 3,
-        preferredDay: "Day 3 - Competitions & Grand Finale (July 24)",
-        arrivalTime: "09:00 AM - 09:30 AM",
-        specialRequirements: "Reserved seating for teachers near front podium",
-        quota: 20,
-        createdAt: new Date(Date.now() - 86400000).toISOString()
-      });
-      
-      console.log('Seeded pre-approved school St. Patrick\'s College (SV26-0042)');
-    }
+    // const schoolsColl = collection(db, 'schools');
+    // const schoolsSnap = await getDocs(schoolsColl);
+    // if (schoolsSnap.empty) {
+    //   const defaultSchoolId = 'demo-school-1';
+    //   const defaultSchool = {
+    //     name: "St. Patrick's College",
+    //     principalName: "Rev. Fr. A. P. Joseph",
+    //     teacherInCharge: "Mr. S. Daniel",
+    //     contact: "+94 77 123 4567",
+    //     email: "stpatricks@jhc.lk",
+    //     address: "St. Patrick's Road, Jaffna",
+    //     logoUrl: "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&q=80&w=200",
+    //     status: "approved",
+    //     registrationId: "SV26-0042",
+    //     qrCodeUrl: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=SV26-0042",
+    //     expectedStudents: 25,
+    //     expectedTeachers: 5,
+    //     preferredDay: "Day 2 - Exhibitions & Practical Labs (July 23)",
+    //     arrivalTime: "08:30 AM - 09:00 AM",
+    //     specialRequirements: "Wheelchair ramp access for 2 students",
+    //     quota: 30,
+    //     createdAt: new Date(Date.now() - 172800000).toISOString()
+    //   };
+    //
+    //   await setDoc(doc(db, 'schools', defaultSchoolId), defaultSchool);
+    //
+    //   // Seed mock participants for this school
+    //   const participants = [
+    //     { id: 'part-1', name: 'Niranjan Sivakumar', type: 'student', role: 'Grade 11 - Physical Science', contact: '+94 77 888 1111', competitions: ['Rocketry Challenge', 'Physics Quiz'], checkedIn: false },
+    //     { id: 'part-2', name: 'Jeyam Thanabalasingam', type: 'student', role: 'Grade 12 - Biology', contact: '+94 77 888 2222', competitions: ['Biology Olympiad'], checkedIn: false },
+    //     { id: 'part-3', name: 'Mr. S. Daniel', type: 'teacher', role: 'Senior Physics Instructor', contact: '+94 77 888 3333', competitions: [], checkedIn: false }
+    //   ];
+    //
+    //   for (const p of participants) {
+    //     await setDoc(doc(db, `schools/${defaultSchoolId}/participants`, p.id), {
+    //       schoolId: defaultSchoolId,
+    //       ...p
+    //     });
+    //   }
+    //
+    //   // Add another pending school to test approval flow
+    //   await setDoc(doc(db, 'schools', 'demo-school-2'), {
+    //     name: "Vembadi Girls' High School",
+    //     principalName: "Mrs. K. Anandaraja",
+    //     teacherInCharge: "Mrs. M. Pushparani",
+    //     contact: "+94 77 987 6543",
+    //     email: "vembadi@jhc.lk",
+    //     address: "Vembadi Road, Jaffna",
+    //     logoUrl: "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80&w=200",
+    //     status: "pending",
+    //     expectedStudents: 15,
+    //     expectedTeachers: 3,
+    //     preferredDay: "Day 3 - Competitions & Grand Finale (July 24)",
+    //     arrivalTime: "09:00 AM - 09:30 AM",
+    //     specialRequirements: "Reserved seating for teachers near front podium",
+    //     quota: 20,
+    //     createdAt: new Date(Date.now() - 86400000).toISOString()
+    //   });
+    //   
+    //   console.log('Seeded pre-approved school St. Patrick\'s College (SV26-0042)');
+    // }
   } catch (err) {
     console.error('Error seeding data:', err);
   }
