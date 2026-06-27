@@ -274,7 +274,7 @@ export async function sendPendingEmail(schoolData: any) {
     <p>You will receive an official confirmation email containing your approved Admission Pass & QR Code once your application is formally approved.</p>
     
     <div class="button-container">
-      <a href="https://sciverse.vercel.app" class="button">Access School Portal</a>
+      <a href="https://jhcsciverse.vercel.app" class="button">Access School Portal</a>
     </div>
   `;
 
@@ -338,7 +338,7 @@ export async function sendConfirmationEmail(schoolData: any) {
     </ul>
     
     <div class="button-container">
-      <a href="https://sciverse.vercel.app" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Print Admission Pass</a>
+      <a href="https://jhcsciverse.vercel.app" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Print Admission Pass</a>
     </div>
   `;
 
