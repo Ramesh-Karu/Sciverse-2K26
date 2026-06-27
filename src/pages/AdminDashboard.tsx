@@ -46,9 +46,9 @@ export default function AdminDashboard() {
   const getWhatsAppMessage = (school: School, regId: string) => {
     const preferredDay = school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)';
     const arrivalTime = school.arrivalTime || '08:30 AM - 09:00 AM';
-    const qrPassUrl = `https://jhcsciverse.vercel.app/qr?data=${regId}`;
+    const qrPassUrl = `https://sujhc.site/qr?data=${regId}`;
     
-    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* 30 Max Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://jhcsciverse.vercel.app* with Registration ID: *${regId}* to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
+    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* 30 Max Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://sujhc.site* with Registration ID: *${regId}* to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
   };
 
   // AI Predictor State
@@ -706,14 +706,6 @@ export default function AdminDashboard() {
                 <div>
                   <h3 className="text-lg font-bold text-white">Enrollment Approvals Queue</h3>
                   <p className="text-xs text-slate-400">Approve invitations to auto-allocate quotas and secure registration IDs</p>
-                </div>
-              </div>
-
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5 sm:mt-0" />
-                <div className="flex-1 text-xs text-slate-300">
-                  <strong className="text-yellow-500 block sm:inline mr-1">Email Notice:</strong> 
-                  Approving a school automatically sends an invitation with an entrance QR pass. If emails are not received, ensure your <code className="bg-white/10 px-1 py-0.5 rounded text-white font-mono">RESEND_API_KEY</code> is set in the **AI Studio Settings (Secrets)** panel. Otherwise, they are printed to the server console log.
                 </div>
               </div>
 

@@ -272,9 +272,10 @@ export async function sendPendingEmail(schoolData: any) {
     <p><strong>What happens next?</strong></p>
     <p>While our administrators review your capacity and day preferences, you can log into the school delegation portal using your <strong>Temporary Access ID (${registrationId})</strong> to preview schedules and update contact profiles.</p>
     <p>You will receive an official confirmation email containing your approved Admission Pass & QR Code once your application is formally approved.</p>
+    <p style="font-size: 13px; color: #64748b;">(If you do not see the confirmation email in your inbox, please check your spam or junk folder.)</p>
     
     <div class="button-container">
-      <a href="https://jhcsciverse.vercel.app" class="button">Access School Portal</a>
+      <a href="https://sujhc.site" class="button">Access School Portal</a>
     </div>
   `;
 
@@ -335,10 +336,11 @@ export async function sendConfirmationEmail(schoolData: any) {
       <li style="margin-bottom: 8px;">Please print this email or keep this digital copy handy on your phone when arriving.</li>
       <li style="margin-bottom: 8px;">Log into the school portal using your <strong>School Registration Code (${registrationId})</strong> to add specific student name rosters and download individual smart ID badges.</li>
       <li style="margin-bottom: 8px;">Please arrive strictly during your scheduled time slot to avoid main-gate congestion.</li>
+      <li style="margin-bottom: 8px; color: #facc15;">If you do not see the confirmation email in your inbox, please check your spam or junk folder.</li>
     </ul>
     
     <div class="button-container">
-      <a href="https://jhcsciverse.vercel.app" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Print Admission Pass</a>
+      <a href="https://sujhc.site" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Print Admission Pass</a>
     </div>
   `;
 
