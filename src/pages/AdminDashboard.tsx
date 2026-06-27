@@ -1,0 +1,1550 @@
+import { useState, useEffect, FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { collection, onSnapshot, doc, updateDoc, getDocs, deleteDoc, addDoc, writeBatch, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
+import { School, Participant, EventDay, ArrivalSlot, NotificationLog } from '../types';
+import Navbar from '../components/Navbar';
+import RobotAssistant from '../components/RobotAssistant';
+import { SchoolPassCard, CardSchoolData } from '../components/StylishCardGenerator';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  ShieldAlert, Check, X, Shield, Calendar, Users, Cpu, FileText, 
+  Settings, UserCheck, Search, Sliders, Play, TrendingUp, Sparkles, AlertTriangle, RefreshCcw, Download, Trash2, ShieldCheck, QrCode,
+  Mail, MessageSquare
+} from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const { success, error: toastError, info, warning: toastWarning } = useToast();
+  
+  // Data State
+  const [schools, setSchools] = useState<School[]>([]);
+  const [eventDays, setEventDays] = useState<EventDay[]>([]);
+  const [arrivalSlots, setArrivalSlots] = useState<ArrivalSlot[]>([]);
+  const [logs, setLogs] = useState<NotificationLog[]>([]);
+  const [admins, setAdmins] = useState<{ id: string; email: string; addedBy?: string; addedAt?: string }[]>([]);
+
+  // UI state
+  const [activeTab, setActiveTab] = useState<'approvals' | 'passes' | 'capacities' | 'checkin' | 'predictions' | 'logs' | 'admins'>('approvals');
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [maxSchoolsLimit, setMaxSchoolsLimit] = useState(15);
+  const [isUpdatingLimit, setIsUpdatingLimit] = useState(false);
+  const [newSlotTime, setNewSlotTime] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+
+  // WhatsApp manual push notification state
+  const [waModalData, setWaModalData] = useState<{
+    phone: string;
+    message: string;
+    schoolName: string;
+    registrationId: string;
+  } | null>(null);
+
+  const getWhatsAppMessage = (school: School, regId: string) => {
+    const preferredDay = school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)';
+    const arrivalTime = school.arrivalTime || '08:30 AM - 09:00 AM';
+    const qrPassUrl = `https://sciverse.vercel.app/qr?data=${regId}`;
+    
+    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* 30 Max Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://sciverse.vercel.app* with Registration ID: *${regId}* to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
+  };
+
+  // AI Predictor State
+  const [aiReport, setAiReport] = useState<any | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // Gate check-in scanner search
+  const [scannerInput, setScannerInput] = useState('');
+  const [scannerResult, setScannerResult] = useState<string | null>(null);
+
+  const { user, loading: authLoading, isAdmin } = useAuth();
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || !isAdmin) {
+      navigate('/');
+      return;
+    }
+    
+    // Subscribe to schools
+    const unsubSchools = onSnapshot(collection(db, 'schools'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as School));
+      // Sort by newest first
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setSchools(list);
+      setIsLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'schools');
+    });
+
+    // Subscribe to Event Days
+    const unsubDays = onSnapshot(collection(db, 'eventDays'), (snapshot) => {
+      setEventDays(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventDay)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'eventDays');
+    });
+
+    // Subscribe to Arrival Slots
+    const unsubSlots = onSnapshot(collection(db, 'arrivalSlots'), (snapshot) => {
+      setArrivalSlots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArrivalSlot)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'arrivalSlots');
+    });
+
+    // Subscribe to Notification logs
+    const unsubLogs = onSnapshot(collection(db, 'notificationLogs'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificationLog));
+      list.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+      setLogs(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notificationLogs');
+    });
+
+    // Subscribe to Admins
+    const unsubAdmins = onSnapshot(collection(db, 'admins'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, email: doc.id, ...doc.data() } as any));
+      setAdmins(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'admins');
+    });
+
+    return () => {
+      unsubSchools();
+      unsubDays();
+      unsubSlots();
+      unsubLogs();
+      unsubAdmins();
+    };
+  }, [user, authLoading, navigate]);
+
+  // Handle Approving a School
+  const handleApprove = async (school: School) => {
+    const approvedCount = schools.filter(s => s.status === 'approved').length;
+    
+    if (approvedCount >= maxSchoolsLimit) {
+      if (!window.confirm(`WARNING: Approved school limit of ${maxSchoolsLimit} has been reached. Placing this school in the Waitlist priority. Do you wish to override and approve anyway?`)) {
+        return;
+      }
+    }
+
+    try {
+      // Generate a unique SciVerse registration ID
+      const randomIdSuffix = Math.floor(1000 + Math.random() * 9000);
+      const regId = `SV26-${randomIdSuffix}`;
+
+      // Update school details
+      await updateDoc(doc(db, 'schools', school.id), {
+        status: 'approved',
+        registrationId: regId,
+        qrCodeUrl: `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`,
+        quota: 30 // standard allotment
+      });
+
+      // Submit an official notification audit
+      await addDoc(collection(db, 'notificationLogs'), {
+        schoolId: school.id,
+        schoolName: school.name,
+        email: school.email,
+        subject: `SciVerse 2K26 Registration APPROVED!`,
+        message: `Dear ${school.teacherInCharge}, your delegation registration is approved. Your School Registration ID is ${regId}. Access the school portal using this ID to view your official master admission pass, set arrival schedules, or verify quota allocations.`,
+        type: 'approved',
+        sentAt: new Date().toISOString()
+      });
+
+      // Automatically dispatch the gorgeous confirmation email on the server
+      const qrPassUrl = `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`;
+      try {
+        await fetch('/api/email/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: school.name,
+            email: school.email,
+            teacherInCharge: school.teacherInCharge,
+            registrationId: regId,
+            qrCodeUrl: qrPassUrl,
+            quota: 30, // standard allotment
+            preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
+            arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
+          }),
+        });
+      } catch (emailErr) {
+        console.error("Failed to automatically dispatch confirmation email:", emailErr);
+      }
+
+      // Open the elegant WhatsApp trigger modal
+      setWaModalData({
+        phone: school.whatsapp || school.contact || '',
+        message: getWhatsAppMessage(school, regId),
+        schoolName: school.name,
+        registrationId: regId
+      });
+
+      success(`Approved: ${school.name}. Assigned Reg ID: ${regId}`);
+    } catch (err) {
+      console.error(err);
+      toastError(`Failed to approve registration: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Handle Rejecting a School
+  const handleReject = async (school: School) => {
+    if (window.confirm(`Decline registration request for ${school.name}?`)) {
+      try {
+        await updateDoc(doc(db, 'schools', school.id), {
+          status: 'rejected'
+        });
+
+        await addDoc(collection(db, 'notificationLogs'), {
+          schoolId: school.id,
+          schoolName: school.name,
+          email: school.email,
+          subject: 'SciVerse 2K26 Registration Declined',
+          message: `Dear ${school.teacherInCharge}, your registration request has been declined because seating capacity bounds have been reached. Reach out to appeal.`,
+          type: 'rejected',
+          sentAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  // Handle Deleting a School Entry
+  const handleDeleteSchool = async (schoolId: string, schoolName: string) => {
+    if (!window.confirm(`Are you absolutely sure you want to delete the school delegation "${schoolName}"? This will permanently delete the school registration record.`)) {
+      return;
+    }
+    try {
+      // 1. Delete all participants in the subcollection first (if any exist)
+      const partsSnap = await getDocs(collection(db, `schools/${schoolId}/participants`));
+      if (!partsSnap.empty) {
+        const batch = writeBatch(db);
+        partsSnap.docs.forEach((docSnap) => {
+          batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+      }
+
+      // 2. Delete the school document itself
+      await deleteDoc(doc(db, 'schools', schoolId));
+
+      // 3. Log notification/audit
+      await addDoc(collection(db, 'notificationLogs'), {
+        schoolId: schoolId,
+        schoolName: schoolName,
+        email: 'system',
+        subject: `Delegation DELETED: ${schoolName}`,
+        message: `School delegation "${schoolName}" has been removed from the database by an administrator.`,
+        type: 'reminder',
+        sentAt: new Date().toISOString()
+      });
+
+      success(`Successfully deleted the "${schoolName}" delegation record.`);
+    } catch (err) {
+      console.error("Error deleting school: ", err);
+      toastError("Error deleting school. See console for details.");
+    }
+  };
+
+  // Resend official HTML confirmation email
+  const handleResendEmail = async (school: School) => {
+    const regId = school.registrationId;
+    if (!regId) {
+      toastError("This school does not have a registration ID assigned.");
+      return;
+    }
+    
+    const qrPassUrl = `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`;
+    info(`Sending confirmation email to ${school.email}...`);
+    try {
+      const res = await fetch('/api/email/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: school.name,
+          email: school.email,
+          teacherInCharge: school.teacherInCharge,
+          registrationId: regId,
+          qrCodeUrl: qrPassUrl,
+          quota: 30, // standard allotment
+          preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
+          arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.method === 'simulation') {
+          success(`[Simulation Mode] Confirmation email logged successfully in Server Console! (No RESEND_API_KEY configured in Secrets panel)`);
+        } else {
+          success(`Confirmation email sent successfully to ${school.email}!`);
+        }
+      } else {
+        toastError(`Failed to send email: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error("Resend email error:", err);
+      toastError("Failed to dispatch confirmation email.");
+    }
+  };
+
+  // Open manual WhatsApp trigger modal for confirmed school
+  const handleTriggerWhatsApp = (school: School) => {
+    const regId = school.registrationId;
+    if (!regId) {
+      toastError("This school does not have a registration ID assigned.");
+      return;
+    }
+    
+    setWaModalData({
+      phone: school.whatsapp || school.contact || '',
+      message: getWhatsAppMessage(school, regId),
+      schoolName: school.name,
+      registrationId: regId
+    });
+  };
+
+  // Handle adding a new arrival slot
+  const handleAddArrivalSlot = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newSlotTime.trim()) return;
+    try {
+      await addDoc(collection(db, 'arrivalSlots'), {
+        time: newSlotTime.trim(),
+        capacity: 9999, // Unused/unlimited capacity
+        currentCount: 0
+      });
+      setNewSlotTime('');
+      success('Arrival slot successfully created!');
+    } catch (err) {
+      console.error("Error adding arrival slot: ", err);
+      toastError("Failed to add arrival slot.");
+    }
+  };
+
+  // Handle deleting an arrival slot
+  const handleDeleteArrivalSlot = async (slotId: string, slotTime: string) => {
+    if (!window.confirm(`Are you absolutely sure you want to delete the arrival slot "${slotTime}"?`)) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'arrivalSlots', slotId));
+      success('Arrival slot deleted.');
+    } catch (err) {
+      console.error("Error deleting slot: ", err);
+      toastError("Failed to delete arrival slot.");
+    }
+  };
+
+  // Trigger Gemini Congestion AI Predictions
+  const triggerAiAnalysis = async () => {
+    setIsAiLoading(true);
+    setAiReport(null);
+
+    try {
+      const response = await fetch('/api/ai/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schools, arrivalSlots })
+      });
+
+      if (!response.ok) {
+        throw new Error('AI analysis failed');
+      }
+
+      const data = await response.json();
+      setAiReport(data);
+      success('Gemini AI Congestion Analysis completed!');
+    } catch (err) {
+      console.error(err);
+      toastError('AI Server latency detected. Please retry analysis.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // Handle Seat Allotment changes
+  const handleSeatChange = async (dayId: string, category: string, value: number) => {
+    try {
+      const dayRef = doc(db, 'eventDays', dayId);
+      const targetDay = eventDays.find(d => d.id === dayId);
+      if (!targetDay) return;
+
+      const details = targetDay.reservedDetails || { vips: 0, judges: 0, organizers: 0, teachers: 0, media: 0, guests: 0 };
+      const updatedDetails = {
+        ...details,
+        [category]: Number(value)
+      };
+
+      const sumReserved = Object.values(updatedDetails).reduce((acc: number, curr: any) => acc + Number(curr), 0);
+
+      await updateDoc(dayRef, {
+        reservedDetails: updatedDetails,
+        reservedSeats: sumReserved
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Update specific field on EventDay (e.g. name, description, capacity, date, registration status)
+  const handleUpdateDayField = async (dayId: string, field: string, value: any) => {
+    try {
+      const dayRef = doc(db, 'eventDays', dayId);
+      await updateDoc(dayRef, {
+        [field]: value
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Perform School delegation gate check-in
+  const performSchoolCheckIn = async (school: School) => {
+    try {
+      const isCheckingIn = !school.checkedIn;
+      const schoolRef = doc(db, 'schools', school.id);
+      await updateDoc(schoolRef, {
+        checkedIn: isCheckingIn,
+        checkInTime: isCheckingIn ? new Date().toISOString() : null
+      });
+
+      // Update arrival slot count
+      const matchedSlot = arrivalSlots.find(s => s.time === school.arrivalTime);
+      if (matchedSlot) {
+        const slotRef = doc(db, 'arrivalSlots', matchedSlot.id);
+        const diff = isCheckingIn ? 1 : -1;
+        await updateDoc(slotRef, {
+          currentCount: Math.max(0, matchedSlot.currentCount + diff)
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Check in school with input string (Registration ID, e.g. SV26-1234, or document ID)
+  const handleScannerSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setScannerResult(null);
+
+    const input = scannerInput.trim();
+    if (!input) return;
+
+    // Search for school matching registrationId or document ID
+    const foundSchool = schools.find(s => s.registrationId === input || s.id === input);
+    if (foundSchool) {
+      await performSchoolCheckIn(foundSchool);
+      const action = !foundSchool.checkedIn ? 'checked in' : 'checked out';
+      setScannerResult(`School "${foundSchool.name}" delegation ${action} successfully! Total allocation: ${foundSchool.expectedStudents || 0} students.`);
+      setScannerInput('');
+    } else {
+      setScannerResult('No registered school found matching this pass registration ID.');
+    }
+  };
+
+  // Export all approved schools as CSV
+  const handleExportSchoolsCSV = () => {
+    const approvedSchools = schools.filter(s => s.status === 'approved');
+    if (approvedSchools.length === 0) {
+      toastWarning("No approved schools to export.");
+      return;
+    }
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Registration ID,School Name,Principal,Teacher in Charge,Contact,Email,Address,Expected Students,Expected Teachers,Preferred Day,Arrival Time,Quota\r\n";
+    
+    approvedSchools.forEach(s => {
+      const row = `"${s.registrationId || ''}","${s.name}","${s.principalName || ''}","${s.teacherInCharge || ''}","${s.contact || ''}","${s.email}","${s.address || ''}",${s.expectedStudents || 0},${s.expectedTeachers || 0},"${s.preferredDay || ''}","${s.arrivalTime || ''}",${s.quota || 0}`;
+      csvContent += row + "\r\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `SciVerse_2K26_Approved_Schools.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    success("Approved schools exported as CSV!");
+  };
+
+  // Export all school attendances as CSV
+  const handleExportParticipantsCSV = () => {
+    const approvedSchools = schools.filter(s => s.status === 'approved');
+    if (approvedSchools.length === 0) {
+      toastWarning("No approved school delegations to export.");
+      return;
+    }
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Registration ID,School Name,Expected Students,Expected Teachers,Total Attendance,Preferred Day,Arrival Time,Checked In,Check-In Time\r\n";
+    
+    approvedSchools.forEach(s => {
+      const total = (s.expectedStudents || 0) + (s.expectedTeachers || 0);
+      const row = `"${s.registrationId || ''}","${s.name}",${s.expectedStudents || 0},${s.expectedTeachers || 0},${total},"${s.preferredDay || ''}","${s.arrivalTime || ''}","${s.checkedIn ? 'YES' : 'NO'}","${s.checkInTime || ''}"`;
+      csvContent += row + "\r\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `SciVerse_2K26_Master_Attendance.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    success("Master attendance sheet exported as CSV!");
+  };
+
+  const handleAddAdmin = async (e: FormEvent) => {
+    e.preventDefault();
+    const emailToAdd = newAdminEmail.trim().toLowerCase();
+    if (!emailToAdd) return;
+    if (emailToAdd === "rameshnathankaruvoolan10@gmail.com") {
+      toastWarning("This is the super admin email and is always active.");
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'admins', emailToAdd), {
+        addedBy: user?.email || 'system',
+        addedAt: new Date().toISOString()
+      });
+      setNewAdminEmail('');
+      success(`Admin with email "${emailToAdd}" successfully added.`);
+    } catch (err) {
+      console.error(err);
+      toastError("Error adding admin. Make sure you have database permissions.");
+    }
+  };
+
+  const handleDeleteAdmin = async (emailToDelete: string) => {
+    if (window.confirm(`Are you sure you want to remove ${emailToDelete} from the admin team?`)) {
+      try {
+        await deleteDoc(doc(db, 'admins', emailToDelete));
+        success(`Admin with email "${emailToDelete}" has been removed.`);
+      } catch (err) {
+        console.error(err);
+        toastError("Error removing admin.");
+      }
+    }
+  };
+
+  const approvedSchools = schools.filter(s => s.status === 'approved');
+  const approvedSchoolsCount = approvedSchools.length;
+  const pendingSchools = schools.filter(s => s.status === 'pending');
+
+  const totalExpectedStudents = approvedSchools.reduce((acc, s) => acc + (s.expectedStudents || 0), 0);
+  const totalExpectedTeachers = approvedSchools.reduce((acc, s) => acc + (s.expectedTeachers || 0), 0);
+  const totalExpectedAttendees = totalExpectedStudents + totalExpectedTeachers;
+
+  const checkedInSchools = approvedSchools.filter(s => s.checkedIn);
+  const checkedInStudents = checkedInSchools.reduce((acc, s) => acc + (s.expectedStudents || 0), 0);
+  const checkedInTeachers = checkedInSchools.reduce((acc, s) => acc + (s.expectedTeachers || 0), 0);
+  const checkedInAttendees = checkedInStudents + checkedInTeachers;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden relative">
+      {/* Background radial overlays */}
+      <div className="absolute top-20 right-10 w-[450px] h-[450px] bg-blue-600/5 rounded-full filter blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-20 left-10 w-[350px] h-[350px] bg-indigo-600/5 rounded-full filter blur-[100px] pointer-events-none"></div>
+
+      <Navbar />
+
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 relative z-10">
+        
+        {/* CONSOLE STATUS BOARD */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/10 pb-6">
+          <div>
+            <h1 className="text-3xl font-black text-white flex items-center gap-2">
+              <Shield className="w-8 h-8 text-blue-500 animate-pulse" />
+              Organizer Control Center
+            </h1>
+            <p className="text-xs text-slate-400 font-mono tracking-wide uppercase">
+              Super Admin Control Panel • rameshnathankaruvoolan10@gmail.com
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <button 
+              onClick={handleExportSchoolsCSV}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-mono font-bold text-slate-300 transition cursor-pointer"
+              title="Export approved schools list"
+            >
+              <Download className="w-3.5 h-3.5" /> Export Schools
+            </button>
+            <button 
+              onClick={handleExportParticipantsCSV}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-mono font-bold text-white transition cursor-pointer shadow-[0_4px_12px_rgba(59,130,246,0.2)]"
+              title="Export master attendance sheet of all school delegations"
+            >
+              <Download className="w-3.5 h-3.5" /> Master Attendance
+            </button>
+
+            {/* APPROVED SCHOOLS LIMIT INPUT */}
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 backdrop-blur-md">
+              <span className="text-[10px] text-slate-400 font-mono uppercase">Max Schools Capacity</span>
+              <input 
+                type="number"
+                value={maxSchoolsLimit}
+                onChange={e => setMaxSchoolsLimit(Number(e.target.value))}
+                className="w-12 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-xs text-white text-center font-mono font-bold"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* METRICS BENTO GRID */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+            <span className="text-xs text-slate-400 font-mono block mb-1">Approved Delegations</span>
+            <h3 className="text-2xl sm:text-3xl font-bold font-mono text-white">
+              {approvedSchoolsCount}<span className="text-xs text-slate-500">/{maxSchoolsLimit} max</span>
+            </h3>
+            <div className="w-full bg-white/10 h-1 rounded-full mt-2 overflow-hidden">
+              <div className="bg-blue-500 h-full" style={{ width: `${(approvedSchoolsCount / maxSchoolsLimit) * 100}%` }}></div>
+            </div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+            <span className="text-xs text-slate-400 font-mono block mb-1">Expected Attendees</span>
+            <h3 className="text-2xl sm:text-3xl font-bold font-mono text-white">
+              {totalExpectedAttendees}
+            </h3>
+            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">{totalExpectedStudents} Students • {totalExpectedTeachers} Teachers</p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+            <span className="text-xs text-slate-400 font-mono block mb-1">Live Gate Ingress</span>
+            <h3 className="text-2xl sm:text-3xl font-bold font-mono text-green-400">
+              {checkedInAttendees}<span className="text-xs text-slate-500"> arrived</span>
+            </h3>
+            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">{checkedInSchools.length} delegations present</p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+            <span className="text-xs text-slate-400 font-mono block mb-1">Waitlist Pipeline</span>
+            <h3 className="text-2xl sm:text-3xl font-bold font-mono text-yellow-500">
+              {pendingSchools.length}
+            </h3>
+            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">Awaiting verification</p>
+          </div>
+        </div>
+
+        {/* TABS CONTROLLER */}
+        <div className="flex gap-2 border-b border-white/10 pb-1 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('approvals')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'approvals' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Approvals Queue ({pendingSchools.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('passes')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'passes' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            School QR Passes ({schools.filter(s => s.status === 'approved').length})
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('capacities')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'capacities' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Seating & Capacities
+          </button>
+
+          <button
+            onClick={() => setActiveTab('checkin')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'checkin' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Gate Check-In
+          </button>
+
+          <button
+            onClick={() => setActiveTab('predictions')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'predictions' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Gemini Congestion AI
+          </button>
+
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'logs' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Notification Logs
+          </button>
+
+          <button
+            onClick={() => setActiveTab('admins')}
+            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'admins' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Admin Management
+          </button>
+        </div>
+
+        {/* TABS BODIES */}
+        <div className="space-y-6">
+          
+          {/* TAB 1: APPROVALS */}
+          {activeTab === 'approvals' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Enrollment Approvals Queue</h3>
+                  <p className="text-xs text-slate-400">Approve invitations to auto-allocate quotas and secure registration IDs</p>
+                </div>
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5 sm:mt-0" />
+                <div className="flex-1 text-xs text-slate-300">
+                  <strong className="text-yellow-500 block sm:inline mr-1">Email Notice:</strong> 
+                  Approving a school automatically sends an invitation with an entrance QR pass. If emails are not received, ensure your <code className="bg-white/10 px-1 py-0.5 rounded text-white font-mono">RESEND_API_KEY</code> is set in the **AI Studio Settings (Secrets)** panel. Otherwise, they are printed to the server console log.
+                </div>
+              </div>
+
+              {pendingSchools.length === 0 ? (
+                <div className="text-center py-16 bg-white/5 border border-white/5 rounded-2xl">
+                  <UserCheck className="w-12 h-12 text-slate-600 mx-auto mb-3 animate-pulse" />
+                  <p className="text-sm font-bold text-slate-400">Approvals queue is clear.</p>
+                  <p className="text-xs text-slate-500 mt-1">All registered schools have been evaluated.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-6">
+                  {pendingSchools.map((s) => (
+                    <motion.div 
+                      layout
+                      key={s.id}
+                      className="p-5 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md space-y-4 flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div className="flex gap-3 items-center">
+                            <div className="w-10 h-10 rounded-lg bg-slate-900 border border-white/5 p-1 shrink-0 overflow-hidden">
+                              <img src={s.logoUrl} alt="Logo" className="w-full h-full object-cover rounded" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-white text-sm">{s.name}</h4>
+                              <p className="text-[10px] text-blue-400 font-mono">{s.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full uppercase">
+                              Pending Review
+                            </span>
+                            <button
+                              onClick={() => handleDeleteSchool(s.id, s.name)}
+                              className="p-1.5 bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all cursor-pointer"
+                              title="Delete School Entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs text-slate-400 border-t border-b border-white/5 py-2.5">
+                          <div>
+                            <p className="text-[9px] text-slate-500 font-mono uppercase">ESTIMATED ROSTER</p>
+                            <p className="text-white font-semibold font-mono">{s.expectedStudents} Students • {s.expectedTeachers} Teachers</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-500 font-mono uppercase">PREFERRED DAY</p>
+                            <p className="text-white font-semibold truncate">{s.preferredDay}</p>
+                          </div>
+                        </div>
+
+                        <div className="text-xs space-y-1 text-slate-300 bg-slate-950/40 p-2.5 rounded-xl">
+                          <p><span className="text-slate-500">Teacher:</span> {s.teacherInCharge} ({s.contact})</p>
+                          <p><span className="text-slate-500">Principal:</span> {s.principalName}</p>
+                          {s.specialRequirements && (
+                            <p className="text-[11px] text-amber-400 font-mono"><span className="text-slate-500">Special Requirements:</span> {s.specialRequirements}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => handleReject(s)}
+                          className="flex-1 py-2 border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-xs font-bold font-mono uppercase transition cursor-pointer"
+                        >
+                          Decline
+                        </button>
+                        <button
+                          onClick={() => handleApprove(s)}
+                          className="flex-1 py-2 border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white rounded-xl text-xs font-bold font-mono uppercase transition cursor-pointer"
+                        >
+                          Approve Registration
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: SCHOOL QR PASSES */}
+          {activeTab === 'passes' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">School Delegation QR Passes</h3>
+                  <p className="text-xs text-slate-400">View, copy, and download stylish registration credentials for verified schools</p>
+                </div>
+
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                  <input 
+                    type="text"
+                    placeholder="Search by school or Reg ID..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-1.5 text-xs focus:outline-none focus:border-blue-500 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {schools.filter(s => s.status === 'approved').length === 0 ? (
+                <div className="text-center py-16 bg-white/5 border border-white/5 rounded-2xl">
+                  <ShieldAlert className="w-12 h-12 text-slate-600 mx-auto mb-3 animate-pulse" />
+                  <p className="text-sm font-bold text-slate-400 font-mono uppercase tracking-wider">No approved schools found.</p>
+                  <p className="text-xs text-slate-500 mt-1">Approve registered schools from the queue to generate QR passes.</p>
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {schools
+                    .filter(s => s.status === 'approved')
+                    .filter(s => {
+                      const queryStr = `${s.name} ${s.registrationId || ''} ${s.email}`.toLowerCase();
+                      return queryStr.includes(searchQuery.toLowerCase());
+                    })
+                    .map((s) => (
+                      <div key={s.id} className="space-y-2.5 flex flex-col justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                        <SchoolPassCard 
+                          school={{
+                            id: s.id,
+                            name: s.name,
+                            registrationId: s.registrationId,
+                            teacherInCharge: s.teacherInCharge,
+                            teacherInChargeEmail: s.teacherInChargeEmail,
+                            teacherInChargePhone: s.teacherInChargePhone,
+                            principalName: s.principalName,
+                            email: s.email,
+                            contact: s.contact,
+                            whatsapp: s.whatsapp,
+                            preferredDay: s.preferredDay,
+                            arrivalTime: s.arrivalTime,
+                            expectedStudents: Number(s.expectedStudents || 0),
+                            expectedTeachers: Number(s.expectedTeachers || 0),
+                            status: 'approved'
+                          }} 
+                        />
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleTriggerWhatsApp(s)}
+                            className="py-2.5 bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/20 text-emerald-400 hover:text-slate-950 rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="Open WhatsApp manual dispatcher with styled invitation text"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 shrink-0" /> WhatsApp
+                          </button>
+                          
+                          <button
+                            onClick={() => handleResendEmail(s)}
+                            className="py-2.5 bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 text-blue-400 hover:text-white rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="Resend gorgeous official registration HTML confirmation email"
+                          >
+                            <Mail className="w-3.5 h-3.5 shrink-0" /> Email Pass
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteSchool(s.id, s.name)}
+                          className="w-full py-2 bg-red-500/10 hover:bg-red-500 border border-red-500/20 text-red-400 hover:text-white rounded-xl text-xs font-bold font-mono uppercase tracking-wide transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" /> Delete Delegation
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: CAPACITIES */}
+          {activeTab === 'capacities' && (
+            <div className="grid lg:grid-cols-12 gap-8">
+              
+              {/* SEATING ALLOCATIONS */}
+              <div className="lg:col-span-8 space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Event Seating Allocations</h3>
+                  <p className="text-xs text-slate-400">Configure safety thresholds and reserve seating bounds for days</p>
+                </div>
+
+                <div className="space-y-6">
+                  {eventDays.map((day) => {
+                    const rDetails = day.reservedDetails || { vips: 0, judges: 0, organizers: 0, teachers: 0, media: 0, guests: 0 };
+                    return (
+                      <div key={day.id} className="p-5 bg-white/5 border border-white/10 rounded-2xl space-y-4">
+                        <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                          <div>
+                            <h4 className="font-bold text-white text-sm">{day.name}</h4>
+                            <p className="text-[10px] text-blue-400 font-mono">{day.date}</p>
+                          </div>
+                          <span className="text-xs font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded font-bold">
+                            Total: {day.capacity} Seats
+                          </span>
+                        </div>
+
+                        {/* CONFIG GRID */}
+                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">VIPs</label>
+                            <input 
+                              type="number"
+                              value={rDetails.vips}
+                              onChange={e => handleSeatChange(day.id, 'vips', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Judges</label>
+                            <input 
+                              type="number"
+                              value={rDetails.judges}
+                              onChange={e => handleSeatChange(day.id, 'judges', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Organizers</label>
+                            <input 
+                              type="number"
+                              value={rDetails.organizers}
+                              onChange={e => handleSeatChange(day.id, 'organizers', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Teachers</label>
+                            <input 
+                              type="number"
+                              value={rDetails.teachers}
+                              onChange={e => handleSeatChange(day.id, 'teachers', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Media</label>
+                            <input 
+                              type="number"
+                              value={rDetails.media}
+                              onChange={e => handleSeatChange(day.id, 'media', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Guests</label>
+                            <input 
+                              type="number"
+                              value={rDetails.guests}
+                              onChange={e => handleSeatChange(day.id, 'guests', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-[11px] text-slate-400 bg-slate-950/30 p-2.5 rounded-xl border border-white/5">
+                          <span>Reserved Allocation ceiling: <strong className="text-white font-mono">{day.reservedSeats} Seats</strong></span>
+                          <span>General Student Seats available: <strong className="text-blue-400 font-mono">{day.capacity - day.reservedSeats} Seats</strong></span>
+                        </div>
+
+                        {/* EDITABLE METADATA & POSTER DESCRIPTION */}
+                        <div className="border-t border-white/5 pt-4 space-y-3">
+                          <span className="text-[10px] text-slate-400 font-mono uppercase tracking-widest block font-bold">Metadata & Poster Description</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Day Title / Theme</label>
+                              <input 
+                                type="text"
+                                value={day.name}
+                                onChange={e => handleUpdateDayField(day.id, 'name', e.target.value)}
+                                className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Date</label>
+                              <input 
+                                type="date"
+                                value={day.date}
+                                onChange={e => handleUpdateDayField(day.id, 'date', e.target.value)}
+                                className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">General Capacity</label>
+                              <input 
+                                type="number"
+                                value={day.capacity}
+                                onChange={e => handleUpdateDayField(day.id, 'capacity', Number(e.target.value))}
+                                className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">Poster-Based Description</label>
+                            <textarea 
+                              rows={2}
+                              value={day.description || ''}
+                              onChange={e => handleUpdateDayField(day.id, 'description', e.target.value)}
+                              placeholder="Describe this day's practical campaigns, experiments, and schedule to match the poster design..."
+                              className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white resize-none"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox"
+                              id={`reg-open-${day.id}`}
+                              checked={day.isOpenForRegistration !== false}
+                              onChange={e => handleUpdateDayField(day.id, 'isOpenForRegistration', e.target.checked)}
+                              className="w-4 h-4 rounded border-white/10 bg-slate-900 focus:ring-blue-500 text-blue-600"
+                            />
+                            <label htmlFor={`reg-open-${day.id}`} className="text-xs text-slate-300 font-medium select-none cursor-pointer">
+                              Active: Open for delegate RSVPs & registrations on this day
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ARRIVAL TIMETABLE QUEUES */}
+              <div className="lg:col-span-4 space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Time of Arrivals Manager</h3>
+                  <p className="text-xs text-slate-400 font-mono">Create, delete, and monitor gate arrival timelines</p>
+                </div>
+
+                {/* ADD NEW ARRIVAL SLOT */}
+                <form onSubmit={handleAddArrivalSlot} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3 backdrop-blur-md">
+                  <label className="block text-xs font-bold text-slate-300 font-mono uppercase">Add New Arrival Time</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      placeholder="e.g. 11:00 AM - 11:30 AM"
+                      value={newSlotTime}
+                      onChange={e => setNewSlotTime(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                    <button 
+                      type="submit"
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold font-mono transition shrink-0 cursor-pointer"
+                    >
+                      ADD
+                    </button>
+                  </div>
+                </form>
+
+                <div className="space-y-3 bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md max-h-[480px] overflow-y-auto custom-scrollbar">
+                  {arrivalSlots.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-slate-500 font-mono">
+                      No arrival times defined yet. Use the form above to add one.
+                    </div>
+                  ) : (
+                    arrivalSlots.map((slot) => {
+                      const matchedSchoolsCount = schools.filter(s => s.arrivalTime === slot.time && s.status === 'approved').length;
+                      const estimatedLoad = schools
+                        .filter(s => s.arrivalTime === slot.time && s.status === 'approved')
+                        .reduce((acc, curr) => acc + (curr.expectedStudents || 0) + (curr.expectedTeachers || 0), 0);
+
+                      return (
+                        <div key={slot.id} className="p-3 bg-slate-900/40 border border-white/5 rounded-xl flex items-center justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <span className="font-bold text-xs text-white block truncate">{slot.time}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-blue-400 font-mono">
+                                {matchedSchoolsCount} {matchedSchoolsCount === 1 ? 'School' : 'Schools'}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">•</span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {estimatedLoad} Attendees
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteArrivalSlot(slot.id, slot.time)}
+                            className="p-1.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 rounded-lg transition shrink-0 cursor-pointer"
+                            title="Delete Arrival Time"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 3: GATE CHECK-IN */}
+          {activeTab === 'checkin' && (
+            <div className="grid lg:grid-cols-12 gap-8">
+              
+              {/* MAIN INGRESS SCANNER */}
+              <div className="lg:col-span-4 space-y-6">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md space-y-4">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono text-blue-400 flex items-center gap-1.5">
+                    <UserCheck className="w-4.5 h-4.5 text-blue-500 animate-pulse" /> Live Ingress Gate Scanner
+                  </h3>
+                  <p className="text-xs text-slate-400">Scan delegation printed Master Pass QR codes or input the Registration ID key to authorize entry.</p>
+
+                  <form onSubmit={handleScannerSubmit} className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-mono mb-1">SCAN TICKET DATA</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. SV26-xxxx"
+                        value={scannerInput}
+                        onChange={e => setScannerInput(e.target.value)}
+                        className="w-full bg-slate-900 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-3 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold font-mono uppercase transition cursor-pointer"
+                    >
+                      Authorize & Check In
+                    </button>
+                  </form>
+
+                  {scannerResult && (
+                    <div className={`p-3 rounded-xl border text-xs font-mono ${
+                      scannerResult.includes('successfully') 
+                        ? 'bg-green-500/10 border-green-500/20 text-green-400' 
+                        : 'bg-red-500/10 border-red-500/20 text-red-400'
+                    }`}>
+                      {scannerResult}
+                    </div>
+                  )}
+                </div>
+
+                {/* OFFICIAL GATE INGRESS PROTOCOLS */}
+                <div className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-2 text-xs text-slate-400 leading-relaxed">
+                  <p className="font-bold text-white font-mono flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-blue-400" /> GATE INGRESS PROTOCOLS:</p>
+                  <p>1. Scan the delegation's official Master Pass QR code using a handheld barcode reader.</p>
+                  <p>2. Alternatively, manually type the delegation's Master Pass ID into the input field above.</p>
+                  <p>3. Confirm matching school credentials and attendance size before checking them in.</p>
+                </div>
+              </div>
+
+              {/* INTERACTIVE SECURITY GATE MANIFEST */}
+              <div className="lg:col-span-8 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Security Check-In Gate Manifest</h3>
+                    <p className="text-xs text-slate-400">Search and toggle school delegation gate-entry status in real-time</p>
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input 
+                      type="text"
+                      placeholder="Search school name or ID..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-1.5 text-xs focus:outline-none focus:border-blue-500 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border border-white/10 rounded-xl bg-white/5 backdrop-blur-md max-h-[450px]">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="text-[10px] text-slate-500 font-mono uppercase tracking-widest border-b border-white/5 bg-slate-900/40">
+                        <th className="py-2.5 px-3">School Name</th>
+                        <th className="py-2.5 px-3">Arrival Schedule</th>
+                        <th className="py-2.5 px-3 text-center">Allotment</th>
+                        <th className="py-2.5 px-3">Master Pass ID</th>
+                        <th className="py-2.5 px-3 text-right">Pass Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {schools
+                        .filter(s => s.status === 'approved')
+                        .filter(s => {
+                          const combinedString = `${s.name} ${s.registrationId || ''} ${s.email}`.toLowerCase();
+                          return combinedString.includes(searchQuery.toLowerCase());
+                        })
+                        .map(s => {
+                          const ticketKey = s.registrationId || s.id;
+                          
+                          return (
+                            <tr key={s.id} className="hover:bg-white/5 transition-colors">
+                              <td className="py-2.5 px-3 font-semibold text-white">{s.name}</td>
+                              <td className="py-2.5 px-3 font-mono text-[10px] text-slate-300">
+                                {s.preferredDay} ({s.arrivalTime})
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-300 font-mono text-center">
+                                {s.expectedStudents || 0} Students / {s.expectedTeachers || 0} Teachers
+                              </td>
+                              <td className="py-2.5 px-3 font-mono text-slate-500 text-[10px]">{ticketKey}</td>
+                              <td className="py-2.5 px-3 text-right">
+                                <button
+                                  onClick={() => performSchoolCheckIn(s)}
+                                  className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer ${
+                                    s.checkedIn 
+                                      ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' 
+                                      : 'bg-white/5 text-slate-400 hover:bg-green-600 hover:text-white'
+                                  }`}
+                                >
+                                  {s.checkedIn ? '✓ Arrived' : 'Inbound'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 4: AI CONGESTION PREDICTIONS */}
+          {activeTab === 'predictions' && (
+            <div className="space-y-6">
+              
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-1.5">
+                    <Cpu className="w-5 h-5 text-blue-400" />
+                    Gemini Traffic Capacity Forecasting
+                  </h3>
+                  <p className="text-xs text-slate-400">Consult Gemini AI models to analyze school registration timetables and prevent gate congestion</p>
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={triggerAiAnalysis}
+                  disabled={isAiLoading}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 shadow-[0_4px_15px_rgba(59,130,246,0.3)] cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 animate-pulse" /> {isAiLoading ? 'Evaluating timelines...' : 'Run Gemini Bottleneck Forecast'}
+                </motion.button>
+              </div>
+
+              <AnimatePresence mode="wait">
+                {isAiLoading && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="p-12 text-center bg-white/5 border border-white/5 rounded-2xl space-y-4"
+                  >
+                    <div className="w-12 h-12 border-t-2 border-blue-500 border-solid rounded-full animate-spin mx-auto"></div>
+                    <p className="text-xs text-slate-400 font-mono">Running neural congestion analysis on school RSVP queues...</p>
+                  </motion.div>
+                )}
+
+                {aiReport && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="grid md:grid-cols-12 gap-6"
+                  >
+                    
+                    {/* RECOMMENDATIONS SUMMARY */}
+                    <div className="md:col-span-8 bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4 backdrop-blur-md">
+                      <h4 className="text-sm font-bold text-white font-mono uppercase tracking-widest text-blue-400 flex items-center gap-1.5">
+                        <TrendingUp className="w-4.5 h-4.5" /> Commitee Action Directives
+                      </h4>
+                      <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-950/40 p-4 rounded-xl border border-white/5">
+                        {aiReport.predictions}
+                      </p>
+                    </div>
+
+                    {/* BOTTLENECK FORECAST METRICS */}
+                    <div className="md:col-span-4 space-y-6">
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-3.5 backdrop-blur-md">
+                        <h4 className="text-xs font-bold font-mono text-blue-400 uppercase tracking-wider">Bottleneck Indicators</h4>
+                        
+                        <div className="space-y-3 text-xs text-slate-300">
+                          <div className="flex justify-between border-b border-white/5 pb-1.5">
+                            <span>Peak Bottleneck Day</span>
+                            <span className="font-bold text-white">{aiReport.bottleneckDay || 'Day 2 - Exhibitions & Practical Labs (July 23)'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/5 pb-1.5">
+                            <span>High-Congestion Hour</span>
+                            <span className="font-bold text-red-400">{aiReport.bottleneckTime || '08:30 AM - 09:00 AM'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/5 pb-1.5">
+                            <span>Estimated Peak Queue</span>
+                            <span className="font-mono text-white font-bold">{aiReport.expectedPeakQueue || '140+ people'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Security Ingress Risk</span>
+                            <span className="font-mono text-yellow-400 font-bold uppercase">{aiReport.mitigationUrgency || 'MEDIUM'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+            </div>
+          )}
+
+          {/* TAB 5: AUDIT LOGS */}
+          {activeTab === 'logs' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">System Notification Logs</h3>
+                <p className="text-xs text-slate-400">Review email notification triggers sent during approvals, updates, and invitations</p>
+              </div>
+
+              <div className="space-y-3 border border-white/10 rounded-xl bg-white/5 p-4 max-h-[500px] overflow-y-auto">
+                {logs.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-8 font-mono">No notifications logged yet.</p>
+                ) : (
+                  logs.map((log) => (
+                    <div key={log.id} className="p-3 bg-slate-950/60 border border-white/5 rounded-xl space-y-1.5 text-xs font-mono">
+                      <div className="flex justify-between text-slate-400 flex-wrap gap-2 text-[10px]">
+                        <span>School: <strong className="text-white">{log.schoolName}</strong> ({log.email})</span>
+                        <span>{new Date(log.sentAt).toLocaleString()}</span>
+                      </div>
+                      <h4 className="font-bold text-blue-400">{log.subject}</h4>
+                      <p className="text-slate-300 leading-relaxed font-sans">{log.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: ADMIN MANAGEMENT */}
+          {activeTab === 'admins' && (
+            <div className="grid lg:grid-cols-12 gap-8">
+              
+              {/* AUTHORIZE NEW ADMIN */}
+              <div className="lg:col-span-5 space-y-6">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md space-y-4">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono text-blue-400 flex items-center gap-1.5">
+                    <Shield className="w-4.5 h-4.5 text-blue-500 animate-pulse" /> Authorize New Administrator
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Grant administrative privileges to a team member by adding their Gmail address. They will be able to access this control center, approve schools, configure timings, and perform scans.
+                  </p>
+
+                  <form onSubmit={handleAddAdmin} className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-mono mb-1">GMAIL ADDRESS</label>
+                      <input 
+                        type="email"
+                        required
+                        placeholder="e.g. co-organizer@gmail.com"
+                        value={newAdminEmail}
+                        onChange={e => setNewAdminEmail(e.target.value)}
+                        className="w-full bg-slate-900 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-3 py-2.5 text-xs font-mono text-white"
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold font-mono uppercase transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <UserCheck className="w-4 h-4" /> Authorize Admin Access
+                    </button>
+                  </form>
+                </div>
+
+                <div className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-2 text-xs text-slate-400 leading-relaxed">
+                  <p className="font-bold text-white font-mono flex items-center gap-1"><Sparkles className="w-3.5 h-3.5 text-blue-400" /> PRIVILEGES NOTICE:</p>
+                  <p>1. Authorized admins must log in via the "Admin Console / Register" using their Google account.</p>
+                  <p>2. To preserve platform ownership integrity, the super admin account cannot be deleted or modified.</p>
+                </div>
+              </div>
+
+              {/* ADMINS DIRECTORY */}
+              <div className="lg:col-span-7 space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Administrator Team Directory</h3>
+                  <p className="text-xs text-slate-400">Active personnel authorized with access permissions</p>
+                </div>
+
+                <div className="overflow-x-auto border border-white/10 rounded-xl bg-white/5 backdrop-blur-md">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="text-[10px] text-slate-500 font-mono uppercase tracking-widest border-b border-white/5 bg-slate-900/40">
+                        <th className="py-3 px-4">Admin Email</th>
+                        <th className="py-3 px-4">Role Designation</th>
+                        <th className="py-3 px-4">Authorized By</th>
+                        <th className="py-3 px-4 text-right">Revoke Access</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {/* ALWAYS DISPLAY ROOT SUPER ADMIN FIRST */}
+                      <tr className="bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+                        <td className="py-3.5 px-4 font-semibold text-white flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></div>
+                          rameshnathankaruvoolan10@gmail.com
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-blue-500/15 text-blue-400 text-[9px] font-bold uppercase tracking-wider font-mono px-2 py-0.5 rounded-full border border-blue-500/20">
+                            Root / Super Admin
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-400 font-mono text-[10px]">System Built-in</td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button 
+                            disabled
+                            className="p-1.5 bg-white/5 text-slate-600 rounded-lg cursor-not-allowed border border-white/5"
+                            title="Root Administrator access cannot be revoked"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+
+                      {admins.map(adm => (
+                        <tr key={adm.id} className="hover:bg-white/5 transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-slate-200">{adm.email}</td>
+                          <td className="py-3.5 px-4">
+                            <span className="bg-emerald-500/10 text-emerald-400 text-[9px] font-bold uppercase tracking-wider font-mono px-2 py-0.5 rounded-full border border-emerald-500/20">
+                              Co-Administrator
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-400 font-mono text-[10px] truncate max-w-[120px]" title={adm.addedBy}>
+                            {adm.addedBy || 'Admin'}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button 
+                              onClick={() => handleDeleteAdmin(adm.id)}
+                              className="p-1.5 bg-white/5 hover:bg-red-500/15 hover:text-red-400 text-slate-400 rounded-lg border border-white/5 transition cursor-pointer"
+                              title="Revoke admin privileges"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+      </main>
+
+      {/* WhatsApp Manual Notification Dispatcher Modal */}
+      <AnimatePresence>
+        {waModalData && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative space-y-4"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex gap-3 items-center">
+                  <div className="p-2.5 bg-green-500/10 border border-green-500/20 rounded-xl">
+                    <QrCode className="w-6 h-6 text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white leading-tight">Registration Approved!</h3>
+                    <p className="text-xs text-slate-400">For {waModalData.schoolName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setWaModalData(null)}
+                  className="p-1 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-emerald-950/20 border border-emerald-500/10 rounded-xl p-3 text-xs text-emerald-300 leading-relaxed">
+                ✨ <strong>Notification Status:</strong> An automated, styled HTML confirmation email has been dispatched to the school delegation contact address.
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Verify School WhatsApp Number</label>
+                  <input
+                    type="text"
+                    value={waModalData.phone}
+                    onChange={e => setWaModalData({ ...waModalData, phone: e.target.value })}
+                    placeholder="Enter phone with country code, e.g. +94771234567"
+                    className="w-full bg-slate-950 border border-white/10 focus:border-green-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-white font-mono"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Make sure to include country code without symbols (e.g. 94 for Sri Lanka).</p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Preview WhatsApp Message</label>
+                  <textarea
+                    rows={8}
+                    value={waModalData.message}
+                    onChange={e => setWaModalData({ ...waModalData, message: e.target.value })}
+                    className="w-full bg-slate-950 border border-white/10 focus:border-green-500 focus:outline-none rounded-xl px-3 py-2 text-xs text-slate-300 font-sans leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setWaModalData(null)}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition cursor-pointer"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => {
+                    const cleanPhone = waModalData.phone.replace(/[^0-9]/g, '');
+                    const encodedMsg = encodeURIComponent(waModalData.message);
+                    window.open(`https://wa.me/${cleanPhone}?text=${encodedMsg}`, '_blank');
+                    setWaModalData(null);
+                  }}
+                  className="flex-[2] py-3 bg-green-500 hover:bg-green-600 text-slate-950 font-bold rounded-xl text-xs font-mono uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-green-500/10"
+                >
+                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.858.002-2.634-1.019-5.111-2.875-6.968-1.857-1.858-4.331-2.88-6.969-2.881-5.441 0-9.866 4.42-9.87 9.858a9.816 9.816 0 001.472 5.004l-.969 3.537 3.633-.953zM18.23 15.34c-.34-.17-2.01-1-2.316-1.11-.312-.112-.538-.17-.764.17-.225.337-.872 1.1-.1.17.653-.762.653-.87.423-.337-.226-.113-1.638-.602-3.118-1.92-1.15-1.025-1.926-2.29-2.152-2.627-.226-.337-.024-.52.146-.689.153-.153.339-.395.509-.593.17-.198.226-.339.339-.565.113-.226.056-.424-.028-.593-.085-.17-.763-1.838-1.045-2.518-.276-.665-.554-.575-.762-.585-.198-.01-.424-.01-.65-.01-.226 0-.593.085-.904.424-.311.339-1.187 1.159-1.187 2.827s1.215 3.279 1.385 3.505c.17.227 2.39 3.651 5.79 5.121.808.349 1.44.558 1.93.714.811.258 1.55.221 2.13.136.65-.098 2.01-.822 2.29-1.583.284-.763.284-1.414.2-1.55-.084-.136-.311-.225-.65-.395z" />
+                  </svg>
+                  Send via WhatsApp
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <RobotAssistant />
+    </div>
+  );
+}

@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "School": {
+      "title": "School",
+      "description": "Information about a registered school for SciVerse 2K26",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "principalName": { "type": "string" },
+        "teacherInCharge": { "type": "string" },
+        "contact": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "address": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "registrationId": { "type": "string" },
+        "qrCodeUrl": { "type": "string" },
+        "expectedStudents": { "type": "integer" },
+        "expectedTeachers": { "type": "integer" },
+        "preferredDay": { "type": "string" },
+        "arrivalTime": { "type": "string" },
+        "specialRequirements": { "type": "string" },
+        "quota": { "type": "integer" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "principalName", "teacherInCharge", "contact", "email", "address", "status", "expectedStudents", "expectedTeachers"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Participant details under a specific school",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["student", "teacher"] },
+        "role": { "type": "string" },
+        "contact": { "type": "string" },
+        "competitions": { "type": "array" },
+        "checkedIn": { "type": "boolean" },
+        "checkInTime": { "type": "string" }
+      },
+      "required": ["schoolId", "name", "type", "checkedIn"]
+    },
+    "EventDay": {
+      "title": "EventDay",
+      "description": "Configured event days for SciVerse 2K26",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "name": { "type": "string" },
+        "capacity": { "type": "integer" },
+        "reservedSeats": { "type": "integer" },
+        "reservedDetails": { "type": "object" }
+      },
+      "required": ["date", "name", "capacity"]
+    },
+    "ArrivalSlot": {
+      "title": "ArrivalSlot",
+      "description": "Arrival time slot and load limit",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "time": { "type": "string" },
+        "capacity": { "type": "integer" },
+        "currentCount": { "type": "integer" }
+      },
+      "required": ["time", "capacity"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Event broadcast news and schedule alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string", "enum": ["alert", "info", "schedule"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "content", "category", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/schools/{schoolId}": {
+      "schema": "School",
+      "description": "Registered schools"
+    },
+    "/schools/{schoolId}/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Participants associated with the school"
+    },
+    "/eventDays/{dayId}": {
+      "schema": "EventDay",
+      "description": "Configured event days and capacities"
+    },
+    "/arrivalSlots/{slotId}": {
+      "schema": "ArrivalSlot",
+      "description": "Defined arrival slots for school queues"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Organizers broadcast communications"
+    }
+  }
+}

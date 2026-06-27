@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny-all catch net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.email == "rameshnathankaruvoolan10@gmail.com");
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "rameshnathankaruvoolan10@gmail.com" ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
+      );
+    }
+
+    function isSchoolCoordinator(schoolId) {
+      return isSignedIn() && (
+        request.auth.uid == schoolId || 
+        request.auth.token.email == get(/databases/$(database)/documents/schools/$(schoolId)).data.email
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Schools Collection
+    match /schools/{schoolId} {
+      allow read: if true; // Public view for registration status/search, restricted details in UI
+      allow create: if schoolId in ['demo-school-1', 'demo-school-2'] || (
+                      request.resource.data.status == "pending" && 
+                      request.resource.data.name is string && 
+                      request.resource.data.name.size() > 0 &&
+                      request.resource.data.name.size() <= 200
+                    );
+      allow update: if isAdmin() || isSchoolCoordinator(schoolId);
+      allow delete: if isAdmin();
+    }
+
+    // Participants subcollection
+    match /schools/{schoolId}/participants/{participantId} {
+      allow read: if true; // Needed for public check-in verification & dashboard
+      allow create, update: if (schoolId == 'demo-school-1' && participantId in ['part-1', 'part-2', 'part-3']) || isAdmin() || isSchoolCoordinator(schoolId);
+      allow delete: if isAdmin() || isSchoolCoordinator(schoolId);
+    }
+
+    // Event Days
+    match /eventDays/{dayId} {
+      allow read: if true;
+      allow create: if dayId in ['day-1', 'day-2', 'day-3'] || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Arrival Slots
+    match /arrivalSlots/{slotId} {
+      allow read: if true;
+      allow create: if slotId in ['slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5'] || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Announcements
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow create: if announcementId in ['ann-1', 'ann-2', 'ann-3'] || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Notification Logs
+    match /notificationLogs/{logId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow create: if true; // Any registration process can log notification event
+      allow update, delete: if isAdmin();
+    }
+
+    // Admins list
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

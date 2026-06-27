@@ -1,0 +1,6 @@
+{
+  "name": "SciVerse 2K26 School Registration & RSVP Portal",
+  "description": "A comprehensive school registration and RSVP management system for SciVerse 2K26.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
