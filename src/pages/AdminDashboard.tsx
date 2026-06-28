@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, doc, updateDoc, getDocs, deleteDoc, addDoc, writeBatch, setDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { School, Participant, EventDay, ArrivalSlot, NotificationLog } from '../types';
+import { School, Participant, EventDay, ArrivalSlot, NotificationLog, SoloStudent } from '../types';
 import Navbar from '../components/Navbar';
 import RobotAssistant from '../components/RobotAssistant';
 import { SchoolPassCard, CardSchoolData } from '../components/StylishCardGenerator';
@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldAlert, Check, X, Shield, Calendar, Users, Cpu, FileText, 
   Settings, UserCheck, Search, Sliders, Play, TrendingUp, Sparkles, AlertTriangle, RefreshCcw, Download, Trash2, ShieldCheck, QrCode,
-  Mail, MessageSquare, ChevronDown
+  Mail, MessageSquare, ChevronDown, User, Phone
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -25,10 +25,12 @@ export default function AdminDashboard() {
   const [eventDays, setEventDays] = useState<EventDay[]>([]);
   const [arrivalSlots, setArrivalSlots] = useState<ArrivalSlot[]>([]);
   const [logs, setLogs] = useState<NotificationLog[]>([]);
+  const [soloStudents, setSoloStudents] = useState<SoloStudent[]>([]);
   const [admins, setAdmins] = useState<{ id: string; email: string; addedBy?: string; addedAt?: string }[]>([]);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'approvals' | 'passes' | 'capacities' | 'checkin' | 'predictions' | 'logs' | 'admins'>('approvals');
+  const [activeTab, setActiveTab] = useState<'approvals' | 'passes' | 'capacities' | 'checkin' | 'predictions' | 'logs' | 'admins' | 'soloStudents'>('approvals');
+  const [soloTab, setSoloTab] = useState<'pending' | 'approved' | 'rejected' | 'checkin'>('pending');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,8 +51,18 @@ export default function AdminDashboard() {
     const preferredDay = school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)';
     const arrivalTime = school.arrivalTime || '08:30 AM - 09:00 AM';
     const qrPassUrl = `https://sujhc.site/qr?data=${regId}`;
+    const portalDirectLink = `https://sujhc.site/?login=${school.id}`;
     
-    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* Unlimited Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://sujhc.site* with Registration ID: *${regId}* to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
+    return `*SciVerse 2K26 Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${school.teacherInCharge}*,\n\nWe are thrilled to inform you that the registration for *${school.name}* is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *School Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n👥 *Allotted Seats/Quota:* Unlimited Attendees (Students & Teachers)\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*One-Click Portal Access:*\n============================\n${portalDirectLink}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Access your school portal at *https://sujhc.site* with Registration ID: *${regId}* or use the direct link above to manage student name rosters and print ID cards.\n\nSee you at the Science Union Exhibition!`;
+  };
+
+  const getWhatsAppMessageSolo = (student: SoloStudent, regId: string) => {
+    const preferredDay = student.preferredDay || 'SciVerse Event Track';
+    const arrivalTime = student.arrivalTime || 'To Be Scheduled';
+    const qrPassUrl = `https://sujhc.site/qr?data=${regId}`;
+    const portalDirectLink = `https://sujhc.site/?login=${student.id}&solo=true`;
+    
+    return `*SciVerse 2K26 Solo Registration Confirmed!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${student.name}*,\n\nWe are thrilled to inform you that your solo registration is officially confirmed! \n\n*Admission Pass Details:*\n============================\n🎫 *Solo Registration ID:* ${regId}\n📅 *Event Day:* ${preferredDay}\n⏰ *Arrival Time Slot:* ${arrivalTime}\n\n*Your QR Entry Pass:*\n============================\nLink: ${qrPassUrl}\n\n*One-Click Portal Access:*\n============================\n${portalDirectLink}\n\n*Instructions:*\n1. Please download and keep the QR entry pass handy.\n2. Present this ID at the gate: *${regId}* or use the direct link above for verification.\n\nSee you at the Science Union Exhibition!`;
   };
 
   // AI Predictor State
@@ -119,12 +131,22 @@ export default function AdminDashboard() {
       handleFirestoreError(error, OperationType.LIST, 'admins');
     });
 
+    // Subscribe to solo students
+    const unsubSolo = onSnapshot(collection(db, 'soloStudents'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setSoloStudents(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'soloStudents');
+    });
+
     return () => {
       unsubSchools();
       unsubDays();
       unsubSlots();
       unsubLogs();
       unsubAdmins();
+      unsubSolo();
     };
   }, [user, authLoading, navigate]);
 
@@ -139,28 +161,32 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Generate a unique SciVerse registration ID
-      const randomIdSuffix = Math.floor(1000 + Math.random() * 9000);
-      const regId = `SV26-${randomIdSuffix}`;
+      const regId = school.registrationId;
 
       // Update school details
-      await updateDoc(doc(db, 'schools', school.id), {
-        status: 'approved',
-        registrationId: regId,
-        qrCodeUrl: `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`,
-        quota: 999999 // Unlimited allotment
-      });
+      try {
+        await updateDoc(doc(db, 'schools', school.id), {
+          status: 'approved',
+          quota: 999999 // Unlimited allotment
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `schools/${school.id}`);
+      }
 
       // Submit an official notification audit
-      await addDoc(collection(db, 'notificationLogs'), {
-        schoolId: school.id,
-        schoolName: school.name,
-        email: school.email,
-        subject: `SciVerse 2K26 Registration APPROVED!`,
-        message: `Dear ${school.teacherInCharge}, your delegation registration is approved. Your School Registration ID is ${regId}. Access the school portal using this ID to view your official master admission pass, set arrival schedules, or verify quota allocations.`,
-        type: 'approved',
-        sentAt: new Date().toISOString()
-      });
+      try {
+        await addDoc(collection(db, 'notificationLogs'), {
+          schoolId: school.id,
+          schoolName: school.name,
+          email: school.email,
+          subject: `SciVerse 2K26 Registration APPROVED!`,
+          message: `Dear ${school.teacherInCharge}, your delegation registration is approved. Your School Registration ID is ${regId}. Access the school portal using this ID to view your official master admission pass, set arrival schedules, or verify quota allocations.`,
+          type: 'approved',
+          sentAt: new Date().toISOString()
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, 'notificationLogs');
+      }
 
       // Automatically dispatch the gorgeous confirmation email on the server
       const qrPassUrl = `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`;
@@ -216,7 +242,7 @@ export default function AdminDashboard() {
           sentAt: new Date().toISOString()
         });
       } catch (err) {
-        console.error(err);
+        handleFirestoreError(err, OperationType.UPDATE, `schools/${school.id}`);
       }
     }
   };
@@ -273,6 +299,7 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: school.id,
           name: school.name,
           email: school.email,
           teacherInCharge: school.teacherInCharge,
@@ -498,6 +525,135 @@ export default function AdminDashboard() {
     }
   };
 
+  // Solo Student Management Logic
+  const handleApproveSolo = async (student: SoloStudent) => {
+    try {
+      const regId = student.registrationId;
+      await updateDoc(doc(db, 'soloStudents', student.id), {
+        status: 'approved'
+      });
+
+      try {
+        await addDoc(collection(db, 'notificationLogs'), {
+          schoolName: student.name,
+          email: student.email,
+          subject: `SciVerse 2K26 Solo Registration APPROVED!`,
+          message: `Hello ${student.name}, your solo registration is approved. Your ID is ${regId}.`,
+          type: 'approved',
+          sentAt: new Date().toISOString()
+        });
+      } catch (logErr) {
+        handleFirestoreError(logErr, OperationType.CREATE, 'notificationLogs');
+      }
+
+      success(`Approved solo student: ${student.name}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `soloStudents/${student.id}`);
+    }
+  };
+
+  const handleRejectSolo = async (student: SoloStudent) => {
+    if (window.confirm(`Decline solo registration for ${student.name}?`)) {
+      try {
+        await updateDoc(doc(db, 'soloStudents', student.id), {
+          status: 'rejected'
+        });
+        success(`Rejected: ${student.name}`);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `soloStudents/${student.id}`);
+      }
+    }
+  };
+
+  const handleDeleteSolo = async (student: SoloStudent) => {
+    if (window.confirm(`Permanently delete ${student.name}'s record?`)) {
+      try {
+        await deleteDoc(doc(db, 'soloStudents', student.id));
+        success("Solo student record deleted");
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `soloStudents/${student.id}`);
+      }
+    }
+  };
+
+  const handleCheckInSolo = async (student: SoloStudent) => {
+    try {
+      const isCheckingIn = !student.checkedIn;
+      await updateDoc(doc(db, 'soloStudents', student.id), {
+        checkedIn: isCheckingIn,
+        checkInTime: isCheckingIn ? new Date().toISOString() : null
+      });
+      success(`${student.name} ${isCheckingIn ? 'checked in' : 'checked out'}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `soloStudents/${student.id}`);
+    }
+  };
+
+  const onSoloQRScan = (data: string) => {
+    const student = soloStudents.find(s => s.registrationId === data);
+    if (student) {
+      if (student.status !== 'approved') {
+        toastError('This student registration is not approved yet.');
+        return;
+      }
+      handleCheckInSolo(student);
+    } else {
+      toastError('Invalid Solo Registration ID');
+    }
+  };
+
+  const handleTriggerWhatsAppSolo = (student: SoloStudent) => {
+    const regId = student.registrationId;
+    if (!regId) {
+      toastError("This student does not have a registration ID assigned.");
+      return;
+    }
+    
+    setWaModalData({
+      phone: student.contact || '',
+      message: getWhatsAppMessageSolo(student, regId),
+      schoolName: student.name,
+      registrationId: regId
+    });
+  };
+
+  const handleResendEmailSolo = async (student: SoloStudent) => {
+    const regId = student.registrationId;
+    if (!regId) {
+      toastError("This student does not have a registration ID assigned.");
+      return;
+    }
+    
+    const qrPassUrl = `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`;
+    info(`Sending confirmation email to ${student.email}...`);
+    try {
+      const res = await fetch('/api/email/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          teacherInCharge: student.parentName,
+          registrationId: regId,
+          qrCodeUrl: qrPassUrl,
+          quota: 1,
+          preferredDay: student.preferredDay || 'SciVerse Event Track',
+          arrivalTime: student.arrivalTime || 'To Be Scheduled',
+          isSolo: true
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        success(`Confirmation email sent successfully to ${student.email}!`);
+      } else {
+        toastError(`Failed to send email: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      toastError("Network error sending confirmation email.");
+    }
+  };
+
   // Check in school with input string (Registration ID, e.g. SV26-1234, or document ID)
   const handleScannerSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -604,14 +760,19 @@ export default function AdminDashboard() {
   const approvedSchoolsCount = approvedSchools.length;
   const pendingSchools = schools.filter(s => s.status === 'pending');
 
+  const approvedSolo = soloStudents.filter(s => s.status === 'approved');
+  const approvedSoloCount = approvedSolo.length;
+  const pendingSolo = soloStudents.filter(s => s.status === 'pending');
+
   const totalExpectedStudents = approvedSchools.reduce((acc, s) => acc + (s.expectedStudents || 0), 0);
   const totalExpectedTeachers = approvedSchools.reduce((acc, s) => acc + (s.expectedTeachers || 0), 0);
-  const totalExpectedAttendees = totalExpectedStudents + totalExpectedTeachers;
+  const totalExpectedAttendees = totalExpectedStudents + totalExpectedTeachers + approvedSoloCount;
 
   const checkedInSchools = approvedSchools.filter(s => s.checkedIn);
   const checkedInStudents = checkedInSchools.reduce((acc, s) => acc + (s.actualStudents !== undefined ? s.actualStudents : (s.expectedStudents || 0)), 0);
   const checkedInTeachers = checkedInSchools.reduce((acc, s) => acc + (s.actualTeachers !== undefined ? s.actualTeachers : (s.expectedTeachers || 0)), 0);
-  const checkedInAttendees = checkedInStudents + checkedInTeachers;
+  const checkedInSoloCount = approvedSolo.filter(s => s.checkedIn).length;
+  const checkedInAttendees = checkedInStudents + checkedInTeachers + checkedInSoloCount;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden relative">
@@ -687,11 +848,13 @@ export default function AdminDashboard() {
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <span className="text-xs text-slate-400 font-mono block mb-1">Expected Attendees</span>
+            <span className="text-xs text-slate-400 font-mono block mb-1">Total Expected Attendees</span>
             <h3 className="text-2xl sm:text-3xl font-bold font-mono text-white">
               {totalExpectedAttendees}
             </h3>
-            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">{totalExpectedStudents} Students • {totalExpectedTeachers} Teachers</p>
+            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">
+              {totalExpectedStudents} Students • {totalExpectedTeachers} Teachers • {approvedSoloCount} Solo
+            </p>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
@@ -699,15 +862,19 @@ export default function AdminDashboard() {
             <h3 className="text-2xl sm:text-3xl font-bold font-mono text-green-400">
               {checkedInAttendees}<span className="text-xs text-slate-500"> arrived</span>
             </h3>
-            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">{checkedInSchools.length} delegations present</p>
+            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">
+              {checkedInSchools.length} Schools • {checkedInSoloCount} Solo present
+            </p>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
             <span className="text-xs text-slate-400 font-mono block mb-1">Waitlist Pipeline</span>
             <h3 className="text-2xl sm:text-3xl font-bold font-mono text-yellow-500">
-              {pendingSchools.length}
+              {pendingSchools.length + pendingSolo.length}
             </h3>
-            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">Awaiting verification</p>
+            <p className="text-[9px] text-slate-500 mt-1 uppercase font-mono">
+              {pendingSchools.length} Schools • {pendingSolo.length} Solo awaiting
+            </p>
           </div>
         </div>
 
@@ -742,6 +909,7 @@ export default function AdminDashboard() {
                 >
                   {[
                     { id: 'approvals', label: `Approvals Queue (${pendingSchools.length})` },
+                    { id: 'soloStudents', label: `Solo Students (${soloStudents.filter(s => s.status === 'pending').length} New)` },
                     { id: 'passes', label: `School QR Passes (${schools.filter(s => s.status === 'approved').length})` },
                     { id: 'capacities', label: 'Seating & Capacities' },
                     { id: 'checkin', label: 'Gate Check-In' },
@@ -776,6 +944,15 @@ export default function AdminDashboard() {
               }`}
             >
               Approvals Queue ({pendingSchools.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab('soloStudents')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'soloStudents' ? 'text-indigo-400 border-indigo-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Solo Students ({soloStudents.filter(s => s.status === 'pending').length})
             </button>
 
             <button
@@ -922,6 +1099,225 @@ export default function AdminDashboard() {
                       </div>
                     </motion.div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: SOLO STUDENTS */}
+          {activeTab === 'soloStudents' && (
+            <div className="space-y-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <User className="w-5 h-5 text-indigo-500" />
+                    Solo Student Management
+                  </h3>
+                  <p className="text-xs text-slate-400">Manage individual student registrations and gate check-ins</p>
+                </div>
+
+                <div className="relative w-full md:w-64">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                  <input 
+                    type="text"
+                    placeholder="Search students..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-indigo-500 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Internal Solo Tabs - Mobile Dropdown responsive */}
+              <div className="relative">
+                <div className="md:hidden mb-4">
+                  <select 
+                    value={soloTab}
+                    onChange={(e) => setSoloTab(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold font-mono uppercase text-indigo-400 focus:outline-none"
+                  >
+                    <option value="pending">Pending ({soloStudents.filter(s => s.status === 'pending').length})</option>
+                    <option value="approved">Verified Soloists ({soloStudents.filter(s => s.status === 'approved').length})</option>
+                    <option value="rejected">Declined</option>
+                    <option value="checkin">Gate Check-In</option>
+                  </select>
+                </div>
+                
+                <div className="hidden md:flex gap-6 border-b border-white/10 mb-6">
+                  {[
+                    { id: 'pending', label: 'Pending Approval', count: soloStudents.filter(s => s.status === 'pending').length },
+                    { id: 'approved', label: 'Verified Soloists', count: soloStudents.filter(s => s.status === 'approved').length },
+                    { id: 'rejected', label: 'Declined', count: soloStudents.filter(s => s.status === 'rejected').length },
+                    { id: 'checkin', label: 'Gate Check-In', count: null }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setSoloTab(tab.id as any)}
+                      className={`pb-3 text-xs font-bold font-mono uppercase tracking-widest border-b-2 transition-all cursor-pointer ${
+                        soloTab === tab.id ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {tab.label} {tab.count !== null && <span className="ml-1 opacity-60">({tab.count})</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {soloTab === 'checkin' && (
+                <div className="bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-6 mb-6">
+                  <div className="flex flex-col md:flex-row gap-6 items-center">
+                    <div className="w-full md:w-1/3 aspect-square max-w-[240px] bg-slate-950 rounded-2xl border border-white/10 overflow-hidden relative">
+                      <QRScanner 
+                        onScanSuccess={onSoloQRScan}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-4">
+                      <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                        <QrCode className="w-5 h-5 text-indigo-400" />
+                        Gate Scanner (Solo Students)
+                      </h4>
+                      <p className="text-sm text-slate-400 leading-relaxed">
+                        Position the solo student's digital or printed pass within the camera frame. 
+                        The system will automatically verify registration status and record check-in time.
+                      </p>
+                      <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span className="text-[11px] text-slate-300 font-mono uppercase">Authorized Entry Mode Active</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {soloStudents
+                  .filter(s => {
+                    if (soloTab === 'checkin') return s.status === 'approved';
+                    return s.status === soloTab;
+                  })
+                  .filter(s => {
+                    const q = searchQuery.toLowerCase();
+                    return s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q) || s.registrationId?.toLowerCase().includes(q);
+                  })
+                  .map(student => (
+                    <motion.div
+                      layout
+                      key={student.id}
+                      className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4 hover:border-indigo-500/30 transition-all flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="space-y-1">
+                            <h3 className="font-bold text-white text-lg">{student.name}</h3>
+                            <p className="text-xs text-indigo-400 font-mono">{student.registrationId || 'PENDING ID'}</p>
+                          </div>
+                          <button 
+                            onClick={() => handleDeleteSolo(student)}
+                            className="p-2 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-xl transition cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 text-[11px] text-slate-400 mb-4">
+                          <div className="flex justify-between border-b border-white/5 pb-1">
+                            <span>School:</span>
+                            <span className="text-white font-medium truncate max-w-[150px]">{student.school}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/5 pb-1">
+                            <span>Grade:</span>
+                            <span className="text-white font-medium">{student.grade}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/5 pb-1">
+                            <span>Guardian:</span>
+                            <span className="text-white font-medium">{student.parentName}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/5 pb-1">
+                            <span>Preferred Day:</span>
+                            <span className="text-indigo-400 font-medium">{student.preferredDay}</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-950/50 p-3 rounded-xl space-y-1.5 mb-4 border border-white/5">
+                          <div className="flex items-center gap-2 text-[10px] text-slate-300 truncate">
+                            <Mail className="w-3 h-3 text-indigo-400" />
+                            {student.email}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-300">
+                            <Phone className="w-3 h-3 text-indigo-400" />
+                            {student.contact}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {soloTab === 'pending' && (
+                          <>
+                            <button 
+                              onClick={() => handleRejectSolo(student)}
+                              className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-[10px] font-bold font-mono uppercase transition cursor-pointer"
+                            >
+                              Decline
+                            </button>
+                            <button 
+                              onClick={() => handleApproveSolo(student)}
+                              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-bold font-mono uppercase transition cursor-pointer"
+                            >
+                              Verify & Approve
+                            </button>
+                          </>
+                        )}
+
+                        {soloTab === 'approved' && (
+                          <div className="w-full space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => handleTriggerWhatsAppSolo(student)}
+                                className="py-2 bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/20 text-emerald-400 hover:text-slate-950 rounded-xl text-[10px] font-bold font-mono uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 shrink-0" /> WhatsApp
+                              </button>
+                              <button
+                                onClick={() => handleResendEmailSolo(student)}
+                                className="py-2 bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 text-blue-400 hover:text-white rounded-xl text-[10px] font-bold font-mono uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Mail className="w-3.5 h-3.5 shrink-0" /> Email Pass
+                              </button>
+                            </div>
+                            <div className="w-full flex items-center justify-center p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-bold font-mono uppercase">
+                              <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Verified Participant
+                            </div>
+                          </div>
+                        )}
+
+                        {soloTab === 'checkin' && (
+                          <button 
+                            onClick={() => handleCheckInSolo(student)}
+                            className={`w-full py-3 rounded-xl text-xs font-bold font-mono uppercase transition flex items-center justify-center gap-2 cursor-pointer ${
+                              student.checkedIn 
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                            }`}
+                          >
+                            {student.checkedIn ? (
+                              <><ShieldCheck className="w-4 h-4" /> Checked In</>
+                            ) : (
+                              <><QrCode className="w-4 h-4" /> Authorize Entry</>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+              </div>
+              
+              {soloStudents.filter(s => {
+                if (soloTab === 'checkin') return s.status === 'approved';
+                return s.status === soloTab;
+              }).length === 0 && (
+                <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/5">
+                  <AlertTriangle className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                  <p className="text-slate-500 font-mono text-sm uppercase">No students found in this category.</p>
                 </div>
               )}
             </div>
@@ -1250,9 +1646,16 @@ export default function AdminDashboard() {
                     <QRScanner onScanSuccess={(text) => {
                       setScannerInput(text);
                       const foundSchool = schools.find(s => s.registrationId === text || s.id === text);
+                      const foundSolo = soloStudents.find(s => s.registrationId === text || s.id === text);
+                      
                       if (foundSchool) {
                         initiateCheckIn(foundSchool);
                         setScannerInput('');
+                      } else if (foundSolo) {
+                        // For solo students, check-in is just a toggle
+                        handleCheckInSolo(foundSolo);
+                        setScannerInput('');
+                        setScannerResult(`Solo student ${foundSolo.name} processed successfully.`);
                       }
                     }} />
                     
@@ -1331,42 +1734,61 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {schools
-                        .filter(s => s.status === 'approved')
+                      {[
+                        ...schools.filter(s => s.status === 'approved').map(s => ({ ...s, isSolo: false })),
+                        ...soloStudents.filter(s => s.status === 'approved').map(s => ({ ...s, isSolo: true }))
+                      ]
                         .filter(s => {
-                          const combinedString = `${s.name} ${s.registrationId || ''} ${s.email}`.toLowerCase();
+                          const combinedString = `${s.name} ${s.registrationId || ''} ${s.email} ${s.isSolo ? 'solo' : 'school'}`.toLowerCase();
                           return combinedString.includes(searchQuery.toLowerCase());
                         })
                         .map(s => {
                           const ticketKey = s.registrationId || s.id;
+                          const totalAllotment = s.isSolo ? 1 : (Number(s.expectedStudents || 0) + Number(s.expectedTeachers || 0));
                           
                           return (
                             <tr key={s.id} className="hover:bg-white/5 transition-colors group">
-                              <td className="py-2 px-3 font-semibold text-white max-w-[150px] truncate">{s.name}</td>
+                              <td className="py-2 px-3 font-semibold text-white max-w-[150px] truncate">
+                                {s.name}
+                                {s.isSolo && <span className="ml-2 text-[8px] bg-indigo-500/20 text-indigo-400 px-1 rounded uppercase font-mono">Solo</span>}
+                              </td>
                               <td className="py-2 px-3">
-                                <span className="text-slate-300 block">{s.preferredDay}</span>
-                                <span className="text-[9px] text-slate-500 font-mono">{s.arrivalTime}</span>
+                                <span className="text-slate-300 block text-[10px]">{s.preferredDay || 'TBD'}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{s.arrivalTime || 'TBD'}</span>
                               </td>
                               <td className="py-2 px-3 text-center">
                                 <div className="flex flex-col">
-                                  <span className="text-blue-400 font-bold">{Number(s.expectedStudents || 0) + Number(s.expectedTeachers || 0)}</span>
-                                  <span className="text-[8px] text-slate-500 font-mono uppercase">Delegates</span>
+                                  <span className="text-blue-400 font-bold">{totalAllotment}</span>
+                                  <span className="text-[8px] text-slate-500 uppercase font-mono">{s.isSolo ? 'Individual' : 'Delegation'}</span>
                                 </div>
                               </td>
                               <td className="py-2 px-3">
                                 <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-1.5 py-0.5 rounded border border-white/5">{ticketKey}</span>
                               </td>
                               <td className="py-2 px-3 text-right">
-                                <button
-                                  onClick={() => initiateCheckIn(s)}
-                                  className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer ${
-                                    s.checkedIn 
-                                      ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' 
-                                      : 'bg-white/5 text-slate-400 hover:bg-green-600 hover:text-white'
-                                  }`}
-                                >
-                                  {s.checkedIn ? '✓ Arrived' : 'Inbound'}
-                                </button>
+                                {s.isSolo ? (
+                                  <button
+                                    onClick={() => handleCheckInSolo(s as unknown as SoloStudent)}
+                                    className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer ${
+                                      s.checkedIn 
+                                        ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' 
+                                        : 'bg-white/5 text-slate-400 hover:bg-green-600 hover:text-white'
+                                    }`}
+                                  >
+                                    {s.checkedIn ? '✓ Arrived' : 'Inbound'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => initiateCheckIn(s as unknown as School)}
+                                    className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer ${
+                                      s.checkedIn 
+                                        ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' 
+                                        : 'bg-white/5 text-slate-400 hover:bg-green-600 hover:text-white'
+                                    }`}
+                                  >
+                                    {s.checkedIn ? '✓ Arrived' : 'Inbound'}
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -1727,9 +2149,17 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="bg-white/5 border border-white/5 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between border-b border-white/5 pb-2">
                     <span className="text-xs text-slate-500 uppercase font-mono">School</span>
-                    <span className="text-sm font-bold text-white">{schoolToCheckIn.name}</span>
+                    <span className="text-sm font-bold text-white text-right">{schoolToCheckIn.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-slate-500 uppercase font-mono">Principal</span>
+                    <span className="text-[11px] font-medium text-slate-300 text-right">{schoolToCheckIn.principalName}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-xs text-slate-500 uppercase font-mono">Teacher In Charge</span>
+                    <span className="text-[11px] font-medium text-slate-300 text-right">{schoolToCheckIn.teacherInCharge}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-xs text-slate-500 uppercase font-mono">Reg ID</span>

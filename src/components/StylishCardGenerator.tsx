@@ -6,17 +6,20 @@ export interface CardSchoolData {
   id: string;
   name: string;
   registrationId?: string;
-  teacherInCharge: string;
+  teacherInCharge?: string;
   teacherInChargeEmail?: string;
   teacherInChargePhone?: string;
-  principalName: string;
+  principalName?: string;
   email: string;
   contact: string;
   preferredDay: string;
   arrivalTime: string;
-  expectedStudents: number;
-  expectedTeachers: number;
+  expectedStudents?: number;
+  expectedTeachers?: number;
   status: 'pending' | 'approved' | 'rejected';
+  isSolo?: boolean;
+  school?: string;
+  parentName?: string;
 }
 
 // Function to wrap and draw text on canvas
@@ -147,13 +150,13 @@ export async function generatePassCardDataURL(school: CardSchoolData): Promise<s
   });
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '900 22px "Inter", system-ui, sans-serif';
+  ctx.font = '900 22px "Space Grotesk", system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('SCIVERSE 2K26', 240, 118);
 
   ctx.fillStyle = isApproved ? '#60a5fa' : '#f59e0b';
   ctx.font = 'bold 9px "JetBrains Mono", monospace';
-  ctx.fillText('OFFICIAL SCHOOL DELEGATION PASS', 240, 134);
+  ctx.fillText(school.isSolo ? 'OFFICIAL SOLO STUDENT PASS' : 'OFFICIAL SCHOOL DELEGATION PASS', 240, 134);
 
   // Status Badge Pill Banner (Top right-ish or center under branding)
   const badgeW = 120;
@@ -164,7 +167,11 @@ export async function generatePassCardDataURL(school: CardSchoolData): Promise<s
   ctx.strokeStyle = isApproved ? 'rgba(34, 197, 94, 0.4)' : 'rgba(234, 179, 8, 0.4)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6) : ctx.rect(badgeX, badgeY, badgeW, badgeH);
+  if (ctx.roundRect) {
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+  } else {
+    ctx.rect(badgeX, badgeY, badgeW, badgeH);
+  }
   ctx.fill();
   ctx.stroke();
 
@@ -193,13 +200,21 @@ export async function generatePassCardDataURL(school: CardSchoolData): Promise<s
       const qY = 190;
       
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(qX, qY, qSize, qSize, 12) : ctx.rect(qX, qY, qSize, qSize);
+      if (ctx.roundRect) {
+        ctx.roundRect(qX, qY, qSize, qSize, 12);
+      } else {
+        ctx.rect(qX, qY, qSize, qSize);
+      }
       ctx.fill();
       
       ctx.strokeStyle = isApproved ? 'rgba(59, 130, 246, 0.4)' : 'rgba(234, 179, 8, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(qX - 6, qY - 6, qSize + 12, qSize + 12, 16) : ctx.rect(qX - 6, qY - 6, qSize + 12, qSize + 12);
+      if (ctx.roundRect) {
+        ctx.roundRect(qX - 6, qY - 6, qSize + 12, qSize + 12, 16);
+      } else {
+        ctx.rect(qX - 6, qY - 6, qSize + 12, qSize + 12);
+      }
       ctx.stroke();
 
       ctx.drawImage(qrImage, qX + 8, qY + 8, qSize - 16, qSize - 16);
@@ -211,11 +226,11 @@ export async function generatePassCardDataURL(school: CardSchoolData): Promise<s
   // ID label beneath QR
   ctx.fillStyle = isApproved ? '#60a5fa' : '#f59e0b';
   ctx.font = 'bold 14px "JetBrains Mono", monospace';
-  const idText = isApproved ? `REG ID: ${school.registrationId}` : `TEMP CODE: PEN-${school.id.slice(0, 6).toUpperCase()}`;
+  const idText = school.registrationId || `TEMP-PEN-${school.id.slice(0, 6).toUpperCase()}`;
   ctx.fillText(idText, 240, 400);
 
   ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
-  ctx.font = '500 8px "Inter", sans-serif';
+  ctx.font = '500 8px "Space Grotesk", sans-serif';
   ctx.fillText(
     isApproved ? 'SCAN AT GATE TO AUTO-CHECK-IN' : 'PENDING OFFICIAL ADMISSION REVIEW',
     240,
@@ -232,12 +247,18 @@ export async function generatePassCardDataURL(school: CardSchoolData): Promise<s
 
   // 6. Lower Section - Delegation Info
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 16px "Inter", system-ui, sans-serif';
+  ctx.font = 'bold 16px "Space Grotesk", system-ui, sans-serif';
   const endY = drawWrappedText(ctx, school.name.toUpperCase(), 240, 460, 400, 22);
 
   // Metadata block left-aligned inside limits
   const metaYStart = Math.max(endY + 25, 500);
-  const items = [
+  
+  const items = school.isSolo ? [
+    { label: 'SCHOOL', value: school.school || 'Private Registration' },
+    { label: 'PARENT/GUARDIAN', value: school.parentName || 'Emergency Contact' },
+    { label: 'PREFERRED TRACK', value: school.preferredDay || 'SciVerse Event Track' },
+    { label: 'GATE ARRIVAL TIME', value: school.arrivalTime || 'To Be Scheduled' }
+  ] : [
     { label: 'COORDINATOR', value: `${school.teacherInCharge || 'Not Configured'} ${school.teacherInChargePhone ? '• ' + school.teacherInChargePhone : ''}` },
     { label: 'PREFERRED TRACK', value: school.preferredDay || 'SciVerse Event Track' },
     { label: 'GATE ARRIVAL TIME', value: school.arrivalTime || 'To Be Scheduled' },
@@ -254,7 +275,7 @@ export async function generatePassCardDataURL(school: CardSchoolData): Promise<s
     ctx.fillText(item.label, 44, itemY);
 
     ctx.fillStyle = '#f1f5f9';
-    ctx.font = '500 11px "Inter", system-ui, sans-serif';
+    ctx.font = '500 11px "Space Grotesk", system-ui, sans-serif';
     ctx.fillText(item.value, 44, itemY + 16);
   });
 
@@ -321,7 +342,7 @@ export const SchoolPassCard: React.FC<SchoolPassCardProps> = ({ school, classNam
           </div>
           <div>
             <h4 className="font-extrabold text-white text-xs tracking-wider uppercase font-mono">SciVerse 2K26</h4>
-            <p className="text-[10px] text-slate-400">JHC Science Union Pass</p>
+            <p className="text-[10px] text-slate-400">{school.isSolo ? 'Solo Student Pass' : 'JHC Science Union Pass'}</p>
           </div>
         </div>
         <span className={`px-2 py-0.5 rounded text-[8px] font-bold font-mono uppercase border ${
@@ -339,20 +360,32 @@ export const SchoolPassCard: React.FC<SchoolPassCardProps> = ({ school, classNam
         <p className="text-[10px] text-slate-400 font-mono">TRACK: <span className="text-white font-sans">{school.preferredDay}</span></p>
         
         <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1 border-t border-white/5">
-          <div>
-            <p className="text-[8px] text-slate-500 font-mono uppercase">COORDINATOR</p>
-            <p className="text-slate-200 truncate font-medium">{school.teacherInCharge}</p>
-            {school.teacherInChargePhone && (
-              <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5" title="Teacher Phone">{school.teacherInChargePhone}</p>
-            )}
-            {school.teacherInChargeEmail && (
-              <p className="text-[9px] text-slate-400 font-mono truncate text-blue-400/80" title="Teacher Email">{school.teacherInChargeEmail}</p>
-            )}
-          </div>
-          <div>
-            <p className="text-[8px] text-slate-500 font-mono uppercase">CAPACITY ALLOTMENT</p>
-            <p className="text-slate-200 font-mono">{school.expectedStudents} St. | {school.expectedTeachers} Te.</p>
-          </div>
+          {school.isSolo ? (
+            <>
+              <div>
+                <p className="text-[8px] text-slate-500 font-mono uppercase">SCHOOL</p>
+                <p className="text-slate-200 truncate font-medium">{school.school}</p>
+              </div>
+              <div>
+                <p className="text-[8px] text-slate-500 font-mono uppercase">PARENT</p>
+                <p className="text-slate-200 truncate font-medium">{school.parentName}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-[8px] text-slate-500 font-mono uppercase">COORDINATOR</p>
+                <p className="text-slate-200 truncate font-medium">{school.teacherInCharge}</p>
+                {school.teacherInChargePhone && (
+                  <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5" title="Teacher Phone">{school.teacherInChargePhone}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-[8px] text-slate-500 font-mono uppercase">CAPACITY ALLOTMENT</p>
+                <p className="text-slate-200 font-mono">{school.expectedStudents} St. | {school.expectedTeachers} Te.</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

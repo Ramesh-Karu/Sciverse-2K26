@@ -285,21 +285,21 @@ export async function sendPendingEmail(schoolData: any) {
 
 // 2. Sends approved/confirmation email
 export async function sendConfirmationEmail(schoolData: any) {
-  const { name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime } = schoolData;
-  const subject = `SciVerse 2K26 - Registration CONFIRMED! [${registrationId}]`;
+  const { id, name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo } = schoolData;
+  const subject = `SciVerse 2K26 - ${isSolo ? 'Solo Registration' : 'Registration'} CONFIRMED! [${registrationId}]`;
   
   const content = `
     <div class="badge badge-success">REGISTRATION CONFIRMED</div>
     <h1 style="color: #10b981;">SciVerse 2K26 Entry Pass Issued!</h1>
     <p>Dear <strong>${teacherInCharge}</strong>,</p>
-    <p>We are thrilled to inform you that your school delegation application for <strong>SciVerse 2K26</strong> has been officially approved! Your master entrance pass has been generated, and your seating allocations are confirmed.</p>
+    <p>We are thrilled to inform you that your ${isSolo ? 'solo student' : 'school delegation'} application for <strong>SciVerse 2K26</strong> has been officially approved! Your master entrance pass has been generated, and your seating allocations are confirmed.</p>
     
     <div class="divider"></div>
     
     <table class="data-grid">
       <tr>
-        <td class="data-label" width="50%">School Name</td>
-        <td class="data-label" width="50%">School Registration Code</td>
+        <td class="data-label" width="50%">${isSolo ? 'Participant Name' : 'School Name'}</td>
+        <td class="data-label" width="50%">${isSolo ? 'Solo' : 'School'} Registration Code</td>
       </tr>
       <tr>
         <td class="data-value">${name}</td>
@@ -313,12 +313,14 @@ export async function sendConfirmationEmail(schoolData: any) {
         <td class="data-value">${preferredDay}</td>
         <td class="data-value">${arrivalTime}</td>
       </tr>
+      ${isSolo ? '' : `
       <tr>
         <td class="data-label" colspan="2">Allotted Student Quota</td>
       </tr>
       <tr>
         <td class="data-value" colspan="2" style="color: #60a5fa;">${quota} Max Attendees (including teachers)</td>
       </tr>
+      `}
     </table>
     
     <div class="qr-section">
@@ -334,13 +336,18 @@ export async function sendConfirmationEmail(schoolData: any) {
     <p><strong>Crucial Instructions:</strong></p>
     <ul style="padding-left: 20px; margin-top: 0; margin-bottom: 20px; color: #cbd5e1; font-size: 14px; line-height: 1.6;">
       <li style="margin-bottom: 8px;">Please print this email or keep this digital copy handy on your phone when arriving.</li>
+      ${isSolo ? `
+      <li style="margin-bottom: 8px;">Present this ID at the gate: <strong>${registrationId}</strong> for verification.</li>
+      ` : `
       <li style="margin-bottom: 8px;">Log into the school portal using your <strong>School Registration Code (${registrationId})</strong> to add specific student name rosters and download individual smart ID badges.</li>
+      `}
       <li style="margin-bottom: 8px;">Please arrive strictly during your scheduled time slot to avoid main-gate congestion.</li>
       <li style="margin-bottom: 8px; color: #facc15;">If you do not see the confirmation email in your inbox, please check your spam or junk folder.</li>
     </ul>
     
     <div class="button-container">
-      <a href="https://sujhc.site" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Print Admission Pass</a>
+      <a href="https://sujhc.site/?login=${id}${isSolo ? '&solo=true' : ''}" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Go to Portal</a>
+      <a href="https://sujhc.site" class="button" style="background-color: #3b82f6; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3); margin-left: 10px;">Visit Website</a>
     </div>
   `;
 

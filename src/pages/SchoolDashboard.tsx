@@ -18,7 +18,8 @@ export default function SchoolDashboard() {
   
   // Session details
   const schoolId = localStorage.getItem('schoolSessionId');
-  const [school, setSchool] = useState<School | null>(null);
+  const isSolo = localStorage.getItem('isSoloSession') === 'true';
+  const [school, setSchool] = useState<any | null>(null);
   const [arrivalSlots, setArrivalSlots] = useState<ArrivalSlot[]>([]);
   const [eventDays, setEventDays] = useState<EventDay[]>([]);
   
@@ -33,16 +34,17 @@ export default function SchoolDashboard() {
       return;
     }
 
-    // Subscribe to School document
-    const unsubSchool = onSnapshot(doc(db, 'schools', schoolId), (docSnap) => {
+    // Subscribe to record document
+    const collectionName = isSolo ? 'soloStudents' : 'schools';
+    const unsubSchool = onSnapshot(doc(db, collectionName, schoolId), (docSnap) => {
       if (docSnap.exists()) {
-        setSchool({ id: docSnap.id, ...docSnap.data() } as School);
+        setSchool({ id: docSnap.id, ...docSnap.data() });
       } else {
-        setError('School record not found.');
+        setError('Record not found.');
       }
       setIsLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `schools/${schoolId}`);
+      handleFirestoreError(error, OperationType.GET, `${collectionName}/${schoolId}`);
     });
 
     // Subscribe to supporting data lists
@@ -70,11 +72,12 @@ export default function SchoolDashboard() {
     if (!school) return;
     setIsSavingPref(true);
     try {
-      await updateDoc(doc(db, 'schools', school.id), {
+      const collectionName = isSolo ? 'soloStudents' : 'schools';
+      await updateDoc(doc(db, collectionName, school.id), {
         preferredDay,
         arrivalTime
       });
-      success('Event attendance day and arrival slot successfully synchronized.');
+      success('Attendance preferences successfully synchronized.');
     } catch (err) {
       console.error(err);
       toastError('Error saving preferences.');
@@ -88,21 +91,32 @@ export default function SchoolDashboard() {
     setIsDownloadingPass(true);
     try {
       const { generatePassCardDataURL } = await import('../components/StylishCardGenerator');
-      const dataUrl = await generatePassCardDataURL({
+      
+      const passData: any = {
         id: school.id,
         name: school.name,
-        principalName: school.principalName,
-        teacherInCharge: school.teacherInCharge,
-        teacherInChargeEmail: school.teacherInChargeEmail || '',
-        teacherInChargePhone: school.teacherInChargePhone || '',
-        contact: school.contact,
         email: school.email,
+        contact: school.contact,
         preferredDay: school.preferredDay,
         arrivalTime: school.arrivalTime,
-        expectedStudents: school.expectedStudents || 0,
-        expectedTeachers: school.expectedTeachers || 0,
-        status: school.status
-      });
+        status: school.status,
+        registrationId: school.registrationId,
+        isSolo: isSolo
+      };
+
+      if (isSolo) {
+        passData.school = school.school;
+        passData.parentName = school.parentName;
+      } else {
+        passData.principalName = school.principalName;
+        passData.teacherInCharge = school.teacherInCharge;
+        passData.teacherInChargeEmail = school.teacherInChargeEmail || '';
+        passData.teacherInChargePhone = school.teacherInChargePhone || '';
+        passData.expectedStudents = school.expectedStudents || 0;
+        passData.expectedTeachers = school.expectedTeachers || 0;
+      }
+
+      const dataUrl = await generatePassCardDataURL(passData);
       const link = document.createElement('a');
       link.download = `${school.name.replace(/\s+/g, '_')}_SciVerse_2K26_Pass.png`;
       link.href = dataUrl;
@@ -143,9 +157,10 @@ export default function SchoolDashboard() {
     );
   }
 
-  const totalAllocated = (school.expectedStudents || 0) + (school.expectedTeachers || 0);
-  const quotaLimit = school.quota || 30;
-  const quotaPercent = Math.min(100, (totalAllocated / quotaLimit) * 100);
+  const totalAllocated = isSolo ? 1 : ((school.expectedStudents || 0) + (school.expectedTeachers || 0));
+  const quotaLimit = school.quota || (isSolo ? 1 : 30);
+  const isUnlimited = quotaLimit >= 9999;
+  const quotaPercent = isUnlimited ? 0 : Math.min(100, (totalAllocated / quotaLimit) * 100);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden relative">
@@ -164,9 +179,9 @@ export default function SchoolDashboard() {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h4 className="text-sm font-bold text-amber-300">Registration Under Review</h4>
+                <h4 className="text-sm font-bold text-amber-300">{isSolo ? 'Registration' : 'Delegation Registration'} Under Review</h4>
                 <p className="text-xs text-amber-400/80 leading-relaxed max-w-3xl">
-                  Your school delegation registration is currently pending review by the SciVerse 2K26 administrative board. 
+                  Your {isSolo ? 'solo participation' : 'school delegation registration'} is currently pending review by the SciVerse 2K26 administrative board. 
                   However, you have **full access** to specify preferred arrival times and view your temporary pass. 
                   Your official digital admission QR pass will activate immediately upon final administrative approval.
                 </p>
@@ -191,7 +206,7 @@ export default function SchoolDashboard() {
             <div>
               <h1 className="text-2xl font-black text-white">{school.name}</h1>
               <p className="text-xs text-slate-400 font-mono">
-                REG ID: <span className="text-blue-400 font-bold tracking-widest">{school.registrationId || `PEN-${school.id.slice(0, 6).toUpperCase()}`}</span> • Science Union . Jaffna Hindu College
+                REG ID: <span className="text-blue-400 font-bold tracking-widest">{school.registrationId || `TEMP-PEN-${school.id.slice(0, 6).toUpperCase()}`}</span> • SciVerse . Science Union . Jaffna Hindu College
               </p>
             </div>
           </div>
@@ -229,11 +244,15 @@ export default function SchoolDashboard() {
           <div className="md:col-span-8 bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)] space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono text-blue-400">Delegation Allocation Quota</h3>
-                <p className="text-xs text-slate-400">Total capacity reserved for your school delegation</p>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono text-blue-400">
+                  {isSolo ? 'Solo Participation Quota' : 'Delegation Allocation Quota'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {isSolo ? 'Individual seat reservation status' : 'Total capacity reserved for your school delegation'}
+                </p>
               </div>
               <span className="text-xs font-mono font-bold text-slate-300">
-                {totalAllocated} / {quotaLimit} Seats
+                {totalAllocated} / {isUnlimited ? 'Unlimited' : `${quotaLimit} Seats`}
               </span>
             </div>
 
@@ -242,16 +261,19 @@ export default function SchoolDashboard() {
                 className={`h-full rounded-full transition-all duration-500 ${
                   quotaPercent >= 100 ? 'bg-red-500' : quotaPercent >= 80 ? 'bg-yellow-500' : 'bg-blue-500'
                 }`}
-                style={{ width: `${quotaPercent}%` }}
+                style={{ width: `${isUnlimited ? 10 : quotaPercent}%` }}
               ></div>
             </div>
 
             <div className="flex justify-between items-center text-[11px] text-slate-400">
               <span className="flex items-center gap-1">
                 <Info className="w-3.5 h-3.5 text-blue-400" /> 
-                {quotaLimit - totalAllocated} remaining capacity slots available for further requests.
+                {isUnlimited 
+                  ? 'Your delegation has unlimited capacity allocation.' 
+                  : `${quotaLimit - totalAllocated} remaining capacity slots available for further requests.`
+                }
               </span>
-              {quotaPercent >= 100 && (
+              {quotaPercent >= 100 && !isUnlimited && (
                 <span className="text-red-400 font-bold flex items-center gap-1 font-mono">
                   <AlertTriangle className="w-3.5 h-3.5" /> LIMIT REACHED
                 </span>
@@ -306,36 +328,73 @@ export default function SchoolDashboard() {
             <div className="space-y-4">
               <div className="space-y-1">
                 <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-5.5 h-5.5 text-blue-400" /> Delegation Attendance Allocation
+                  <ShieldCheck className="w-5.5 h-5.5 text-blue-400" /> 
+                  {isSolo ? 'Individual Participation Pass' : 'Delegation Attendance Allocation'}
                 </h3>
-                <p className="text-xs text-slate-400 font-mono uppercase tracking-wider text-blue-400/80">SciVerse 2K26 Institutional Master Pass Policy</p>
+                <p className="text-xs text-slate-400 font-mono uppercase tracking-wider text-blue-400/80">
+                  {isSolo ? 'SciVerse 2K26 Solo Student Policy' : 'SciVerse 2K26 Institutional Master Pass Policy'}
+                </p>
               </div>
 
               <div className="p-4 bg-slate-900/40 border border-white/5 rounded-xl text-xs text-slate-300 leading-relaxed space-y-3 font-sans">
+                {isSolo ? (
+                  <>
+                    <p>
+                      <strong>Solo Student Entrance:</strong> You are registered as an individual participant. Please ensure you wear your official school uniform and are accompanied by a parent or guardian.
+                    </p>
+                    <p>
+                      Your entrance pass is valid for the specified event day and arrival slot. Present your QR code at the registration desk for verification.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      <strong>No Student Roster Entry Needed:</strong> SciVerse 2K26 operates on a streamlined <strong>Institutional-Level delegation model</strong>. You are not required to submit or register individual student names or teacher rosters.
+                    </p>
+                    <p>
+                      The exact number of students and accompanying teachers you specified during registration has been reserved and allocated to your delegation. To enter the O/L Science Practical Camp, your entire delegation will be checked in at the gates under your school's <strong>Master Pass</strong>.
+                    </p>
+                  </>
+                )}
                 <p>
-                  <strong>No Student Roster Entry Needed:</strong> SciVerse 2K26 operates on a streamlined <strong>Institutional-Level delegation model</strong>. You are not required to submit or register individual student names or teacher rosters.
-                </p>
-                <p>
-                  The exact number of students and accompanying teachers you specified during registration has been reserved and allocated to your delegation. To enter the O/L Science Practical Camp, your entire delegation will be checked in at the gates under your school's <strong>Master Pass</strong>.
-                </p>
-                <p>
-                  To change your student or teacher allotment counts, please contact the Jaffna Hindu College Science Union organizing committee.
+                  To change your allotment or details, please contact the Jaffna Hindu College Science Union organizing committee.
                 </p>
               </div>
 
               <div className="grid grid-cols-3 gap-4 pt-2">
-                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Students Allotment</span>
-                  <span className="text-2xl font-black text-blue-400 font-mono">{school.expectedStudents || 0}</span>
-                </div>
-                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Teachers Allotment</span>
-                  <span className="text-2xl font-black text-indigo-400 font-mono">{school.expectedTeachers || 0}</span>
-                </div>
-                <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Total Capacity</span>
-                  <span className="text-2xl font-black text-emerald-400 font-mono">{totalAllocated}</span>
-                </div>
+                {isSolo ? (
+                  <>
+                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Age</span>
+                      <span className="text-2xl font-black text-blue-400 font-mono">{school.age || '--'}</span>
+                    </div>
+                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Grade</span>
+                      <span className="text-2xl font-black text-indigo-400 font-mono">{school.grade || '--'}</span>
+                    </div>
+                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Status</span>
+                      <span className={`text-sm font-black font-mono uppercase ${school.status === 'approved' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {school.status}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Students Allotment</span>
+                      <span className="text-2xl font-black text-blue-400 font-mono">{school.expectedStudents || 0}</span>
+                    </div>
+                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Teachers Allotment</span>
+                      <span className="text-2xl font-black text-indigo-400 font-mono">{school.expectedTeachers || 0}</span>
+                    </div>
+                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Total Capacity</span>
+                      <span className="text-2xl font-black text-emerald-400 font-mono">{totalAllocated}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -350,7 +409,7 @@ export default function SchoolDashboard() {
           {/* MASTER QR DELEGATION PASS CARD */}
           <div className="lg:col-span-5 space-y-4">
             <div>
-              <h3 className="text-lg font-bold text-white">Your Institutional Master Pass</h3>
+              <h3 className="text-lg font-bold text-white">{isSolo ? 'Your Personal Entry Pass' : 'Your Institutional Master Pass'}</h3>
               <p className="text-xs text-slate-400">Download, print or show this portrait pass at the registration desk</p>
             </div>
 
@@ -374,7 +433,10 @@ export default function SchoolDashboard() {
                 arrivalTime: school.arrivalTime,
                 specialRequirements: school.specialRequirements,
                 quota: school.quota,
-                createdAt: school.createdAt
+                createdAt: school.createdAt,
+                isSolo: isSolo,
+                school: school.school,
+                parentName: school.parentName
               }} 
               className="w-full"
             />

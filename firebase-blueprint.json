@@ -89,6 +89,49 @@
       "properties": {
         "maxSchoolsLimit": { "type": "integer" }
       }
+    },
+    "SoloStudent": {
+      "title": "SoloStudent",
+      "description": "Information about an individual student registration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "school": { "type": "string" },
+        "age": { "type": "integer" },
+        "grade": { "type": "string" },
+        "contact": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "address": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentContact": { "type": "string" },
+        "parentEmail": { "type": "string", "format": "email" },
+        "preferredDay": { "type": "string" },
+        "arrivalTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "registrationId": { "type": "string" },
+        "qrCodeUrl": { "type": "string" },
+        "checkedIn": { "type": "boolean" },
+        "checkInTime": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "school", "age", "grade", "contact", "email", "address", "parentName", "parentContact", "status", "createdAt"]
+    },
+    "NotificationLog": {
+      "title": "NotificationLog",
+      "description": "History of notifications sent to users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "sentAt": { "type": "string" }
+      },
+      "required": ["email", "subject", "message", "type", "sentAt"]
     }
   },
   "firestore": {
@@ -103,6 +146,14 @@
     "/schools/{schoolId}/participants/{participantId}": {
       "schema": "Participant",
       "description": "Participants associated with the school"
+    },
+    "/soloStudents/{studentId}": {
+      "schema": "SoloStudent",
+      "description": "Individual student registrations"
+    },
+    "/notificationLogs/{logId}": {
+      "schema": "NotificationLog",
+      "description": "Notification history"
     },
     "/eventDays/{dayId}": {
       "schema": "EventDay",

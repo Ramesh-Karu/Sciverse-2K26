@@ -82,3 +82,26 @@ export interface NotificationLog {
   type: 'approved' | 'rejected' | 'reminder' | 'announcement';
   sentAt: string;
 }
+
+export interface SoloStudent {
+  id: string;
+  name: string;
+  school: string;
+  age: number;
+  grade: string;
+  contact: string;
+  whatsapp?: string;
+  email: string;
+  address: string;
+  parentName: string;
+  parentContact: string;
+  parentEmail?: string;
+  preferredDay?: string;
+  arrivalTime?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  registrationId?: string;
+  qrCodeUrl?: string;
+  checkedIn?: boolean;
+  checkInTime?: string;
+  createdAt: string;
+}

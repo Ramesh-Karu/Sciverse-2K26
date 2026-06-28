@@ -1,5 +1,5 @@
 import { useEffect, useState, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { collection, getDocs, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { seedInitialData } from '../lib/seeding';
@@ -195,6 +195,94 @@ export default function LandingPage() {
     }
   };
 
+  const [searchParams] = useSearchParams();
+  const directLoginId = searchParams.get('login')?.trim();
+  const isSoloParam = searchParams.get('solo') === 'true';
+
+  useEffect(() => {
+    if (directLoginId) {
+      // Clear previous session to ensure clean login
+      localStorage.removeItem('schoolSessionId');
+      localStorage.removeItem('isSoloSession');
+      localStorage.removeItem('schoolRegId');
+
+      const handleDirectLogin = async () => {
+        setIsLoggingIn(true);
+        setCoordinatorError('');
+        try {
+          // First attempt with the suggested collection
+          let collectionName = isSoloParam ? 'soloStudents' : 'schools';
+          let docRef = doc(db, collectionName, directLoginId);
+          let docSnap = await getDoc(docRef);
+
+          // If not found and it was supposed to be a school, try solo (and vice versa)
+          if (!docSnap.exists()) {
+            const fallbackCollection = isSoloParam ? 'schools' : 'soloStudents';
+            docRef = doc(db, fallbackCollection, directLoginId);
+            docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+              collectionName = fallbackCollection;
+            }
+          }
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.status === 'rejected') {
+              setCoordinatorError('This registration has been declined. Please contact support.');
+              setIsLoggingIn(false);
+            } else {
+              const isActuallySolo = collectionName === 'soloStudents';
+              localStorage.setItem('schoolSessionId', docSnap.id);
+              localStorage.setItem('isSoloSession', isActuallySolo ? 'true' : 'false');
+              localStorage.setItem('schoolRegId', data.registrationId || docSnap.id);
+              
+              // Success! Clear the query params and navigate
+              navigate('/dashboard', { replace: true });
+            }
+          } else {
+            console.error('Direct login ID not found in either collection:', directLoginId);
+            setCoordinatorError('Invalid direct login link. Your record could not be found.');
+            setIsLoggingIn(false);
+          }
+        } catch (err) {
+          console.error('Direct login error:', err);
+          setCoordinatorError('Connection error during automatic login. Please try again.');
+          setIsLoggingIn(false);
+        }
+      };
+      handleDirectLogin();
+    }
+  }, [directLoginId, isSoloParam, navigate]);
+
+  // If auto-login is active, show a splash screen
+  if (directLoginId && isLoggingIn && !coordinatorError) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-center p-6">
+        <div className="w-20 h-20 mb-8 relative">
+          <div className="absolute inset-0 bg-blue-500 rounded-full blur-2xl opacity-20 animate-pulse"></div>
+          <motion.div 
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            className="w-full h-full border-4 border-blue-500/20 border-t-blue-500 rounded-full"
+          />
+        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          <h2 className="text-2xl font-black text-white tracking-tight">Authenticating...</h2>
+          <p className="text-slate-400 font-mono text-sm">Please wait while we verify your secure access portal.</p>
+          <div className="flex items-center justify-center gap-2 pt-4">
+            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   // School Coordinator login with ID or Email
   const handleSchoolLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -216,30 +304,64 @@ export default function LandingPage() {
       const qRegId = query(collection(db, 'schools'), where('registrationId', '==', inputUpper));
       const qEmail = query(collection(db, 'schools'), where('email', '==', inputLower));
       const qTeacherEmail = query(collection(db, 'schools'), where('teacherInChargeEmail', '==', inputLower));
+      
+      // Check Solo Students too
+      const qSoloRegId = query(collection(db, 'soloStudents'), where('registrationId', '==', inputUpper));
+      const qSoloEmail = query(collection(db, 'soloStudents'), where('email', '==', inputLower));
 
-      const [snapRegId, snapEmail, snapTeacherEmail] = await Promise.all([
+      const [snapRegId, snapEmail, snapTeacherEmail, snapSoloRegId, snapSoloEmail] = await Promise.all([
         getDocs(qRegId),
         getDocs(qEmail),
-        getDocs(qTeacherEmail)
+        getDocs(qTeacherEmail),
+        getDocs(qSoloRegId),
+        getDocs(qSoloEmail)
       ]);
 
       let schoolDoc = null;
+      let isSolo = false;
+
       if (!snapRegId.empty) {
         schoolDoc = snapRegId.docs[0];
       } else if (!snapEmail.empty) {
         schoolDoc = snapEmail.docs[0];
       } else if (!snapTeacherEmail.empty) {
         schoolDoc = snapTeacherEmail.docs[0];
+      } else if (!snapSoloRegId.empty) {
+        schoolDoc = snapSoloRegId.docs[0];
+        isSolo = true;
+      } else if (!snapSoloEmail.empty) {
+        schoolDoc = snapSoloEmail.docs[0];
+        isSolo = true;
+      } else {
+        // Final fallback: check if input is a direct Document ID
+        try {
+          const directSchoolRef = doc(db, 'schools', inputVal);
+          const directSchoolSnap = await getDoc(directSchoolRef);
+          if (directSchoolSnap.exists()) {
+            schoolDoc = directSchoolSnap;
+            isSolo = false;
+          } else {
+            const directSoloRef = doc(db, 'soloStudents', inputVal);
+            const directSoloSnap = await getDoc(directSoloRef);
+            if (directSoloSnap.exists()) {
+              schoolDoc = directSoloSnap;
+              isSolo = true;
+            }
+          }
+        } catch (e) {
+          // Ignore error, probably not a valid ID format for direct check
+        }
       }
 
       if (!schoolDoc) {
-        setCoordinatorError('Invalid credentials. No registered school matches this ID or Email.');
+        setCoordinatorError('Invalid credentials. No registered school or solo participant matches this ID or Email.');
       } else {
         const schoolDocData = schoolDoc.data();
         if (schoolDocData.status === 'rejected') {
-          setCoordinatorError('This school registration has been declined. Please reach out to administrators.');
+          setCoordinatorError('This registration has been declined. Please reach out to administrators.');
         } else {
           localStorage.setItem('schoolSessionId', schoolDoc.id);
+          localStorage.setItem('isSoloSession', isSolo ? 'true' : 'false');
           localStorage.setItem('schoolRegId', schoolDocData.registrationId || schoolDoc.id);
           navigate('/dashboard');
         }
