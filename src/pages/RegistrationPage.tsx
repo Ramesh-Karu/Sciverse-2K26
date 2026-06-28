@@ -174,8 +174,8 @@ export default function RegistrationPage() {
       }
     } else if (registrationType === 'student') {
       if (step === 1) {
-        if (!studentData.name.trim() || !studentData.school.trim() || !studentData.email.trim() || !studentData.contact.trim() || !studentData.address.trim()) {
-          setErrorMessage('Please fill out your personal information, school name, and email.');
+        if (!studentData.name.trim() || !studentData.school.trim() || !studentData.email.trim() || !studentData.contact.trim() || !studentData.whatsapp.trim() || !studentData.address.trim()) {
+          setErrorMessage('Please fill out your personal information, school name, WhatsApp number, and email.');
           return false;
         }
         if (!studentData.email.includes('@')) {
@@ -796,7 +796,7 @@ export default function RegistrationPage() {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
                                 <label className="block text-xs text-slate-400 mb-1">PERSONAL EMAIL</label>
                                 <input
@@ -816,6 +816,17 @@ export default function RegistrationPage() {
                                   placeholder="+94 77 xxxxxxx"
                                   value={studentData.contact}
                                   onChange={e => setStudentData({...studentData, contact: e.target.value})}
+                                  className="w-full bg-slate-900/60 border border-white/10 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1">WHATSAPP NUMBER</label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="+94 77 xxxxxxx"
+                                  value={studentData.whatsapp}
+                                  onChange={e => setStudentData({...studentData, whatsapp: e.target.value})}
                                   className="w-full bg-slate-900/60 border border-white/10 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm"
                                 />
                               </div>

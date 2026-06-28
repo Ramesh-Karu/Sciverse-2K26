@@ -544,6 +544,9 @@ export default function AdminDashboard() {
         handleFirestoreError(logErr, OperationType.CREATE, 'notificationLogs');
       }
 
+      // Open the elegant WhatsApp trigger modal
+      handleTriggerWhatsAppSolo(student);
+
       success(`Approved solo student: ${student.name}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `soloStudents/${student.id}`);
@@ -608,7 +611,7 @@ export default function AdminDashboard() {
     }
     
     setWaModalData({
-      phone: student.contact || '',
+      phone: student.whatsapp || student.contact || '',
       message: getWhatsAppMessageSolo(student, regId),
       schoolName: student.name,
       registrationId: regId

@@ -398,7 +398,7 @@ export default function LandingPage() {
             
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
               SciVerse <span className="text-blue-500 bg-clip-text">2K26</span> <br />
-              <span className="text-slate-300 font-light text-3xl sm:text-4xl lg:text-5xl">School Registration & RSVP</span>
+              <span className="text-slate-300 font-light text-3xl sm:text-4xl lg:text-5xl">Schools and Students Registration and RSVP</span>
             </h1>
             
             <p className="text-base sm:text-lg text-slate-400 max-w-xl leading-relaxed">
@@ -474,9 +474,9 @@ export default function LandingPage() {
               <div className="border-b border-white/10 pb-4">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <School className="w-5 h-5 text-blue-400" />
-                  School Delegation Portal
+                  School & Student Portal
                 </h2>
-                <p className="text-xs text-slate-400">Approved schools can manage participants & RSVP here</p>
+                <p className="text-xs text-slate-400">Approved schools and students can manage participants & RSVP here</p>
               </div>
 
               {/* Coordinator ID Login Form */}
@@ -622,7 +622,7 @@ export default function LandingPage() {
 
           {schoolsList.filter((s: any) => s.status === 'approved').length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-xs font-mono">
-              No approved school delegations yet. Submit yours in the School Registration tab!
+              No approved school delegations yet. Submit yours in the Schools and Students Registration tab!
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
