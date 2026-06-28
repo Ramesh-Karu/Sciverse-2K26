@@ -5,6 +5,7 @@ import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { seedInitialData } from '../lib/seeding';
 import { useAuth } from '../context/AuthContext';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { EventDay, School as SchoolType, Announcement } from '../types';
 import Navbar from '../components/Navbar';
 import RobotAssistant from '../components/RobotAssistant';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,9 +28,9 @@ export default function LandingPage() {
   const [totalApproved, setTotalApproved] = useState(0);
 
   // Firestore Data lists
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [eventDays, setEventDays] = useState<any[]>([]);
-  const [schoolsList, setSchoolsList] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [eventDays, setEventDays] = useState<EventDay[]>([]);
+  const [schoolsList, setSchoolsList] = useState<SchoolType[]>([]);
   const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
 
   // Auth / Login Simulation for Coordinators
@@ -55,7 +56,7 @@ export default function LandingPage() {
 
     // Read Event Days
     const unsubDays = onSnapshot(collection(db, 'eventDays'), async (snapshot) => {
-      const days = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const days = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventDay));
       setEventDays(days);
 
       // Compute dynamic seating capacity used and total participants
@@ -263,7 +264,12 @@ export default function LandingPage() {
         
         {/* HERO SECTION */}
         <div className="grid lg:grid-cols-12 gap-12 items-center pt-4">
-          <div className="lg:col-span-7 space-y-6">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="lg:col-span-7 space-y-6"
+          >
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-mono tracking-wider uppercase">
               <Sparkles className="w-3.5 h-3.5" /> Science Union . Jaffna Hindu College
             </div>
@@ -278,7 +284,12 @@ export default function LandingPage() {
             </p>
 
             {/* Countdown Widget */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 max-w-md backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.2)]">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-white/5 border border-white/10 rounded-2xl p-4 max-w-md backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.2)]"
+            >
               <p className="text-xs text-blue-400 font-mono tracking-widest uppercase mb-2">Event Countdown</p>
               <div className="grid grid-cols-4 gap-2 text-center">
                 <div className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
@@ -298,9 +309,14 @@ export default function LandingPage() {
                   <p className="text-[9px] text-slate-400 uppercase">Secs</p>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="flex flex-wrap gap-4 pt-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="flex flex-wrap gap-4 pt-4"
+            >
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -321,11 +337,17 @@ export default function LandingPage() {
               >
                 Access Portal
               </motion.button>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* LOGIN PANES & SYSTEM QUICK ACCESS */}
-          <div id="portal-login" className="lg:col-span-5 relative z-20">
+          <motion.div 
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            id="portal-login" 
+            className="lg:col-span-5 relative z-20"
+          >
             <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-6">
               <div className="border-b border-white/10 pb-4">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -393,12 +415,18 @@ export default function LandingPage() {
                 </p>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* METRICS & SYSTEM SNAPSHOT */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6 }}
+          className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
+        >
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)] hover:bg-white/10 transition-colors">
             <div className="flex justify-between items-start mb-2 text-slate-400">
               <span className="text-xs sm:text-sm">Delegated Schools</span>
               <School className="w-4 h-4 text-blue-400" />
@@ -409,7 +437,7 @@ export default function LandingPage() {
             <p className="text-[10px] text-slate-400 mt-1 uppercase font-mono">Approved / Enrolled</p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)] hover:bg-white/10 transition-colors">
             <div className="flex justify-between items-start mb-2 text-slate-400">
               <span className="text-xs sm:text-sm">Total Participants</span>
               <Users className="w-4 h-4 text-blue-400" />
@@ -418,7 +446,7 @@ export default function LandingPage() {
             <p className="text-[10px] text-slate-400 mt-1 uppercase font-mono">Students & Teachers</p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)] hover:bg-white/10 transition-colors">
             <div className="flex justify-between items-start mb-2 text-slate-400">
               <span className="text-xs sm:text-sm">Attendance Forecast</span>
               <Award className="w-4 h-4 text-green-400" />
@@ -427,7 +455,7 @@ export default function LandingPage() {
             <p className="text-[10px] text-slate-400 mt-1 uppercase font-mono">AI Optimism Index</p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.1)] hover:bg-white/10 transition-colors">
             <div className="flex justify-between items-start mb-2 text-slate-400">
               <span className="text-xs sm:text-sm">Seating Capacities</span>
               <Calendar className="w-4 h-4 text-blue-400" />
@@ -437,10 +465,16 @@ export default function LandingPage() {
             </h3>
             <p className="text-[10px] text-slate-400 mt-1 uppercase font-mono">All days aggregated</p>
           </div>
-        </div>
+        </motion.div>
 
         {/* VERIFIED SCHOOLS BOARD */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md space-y-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6 }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md space-y-6"
+        >
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/10 pb-4">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
@@ -510,10 +544,16 @@ export default function LandingPage() {
                 )}
             </div>
           )}
-        </div>
+        </motion.div>
 
         {/* LIVE BROADCASTS & EVENT TIMELINES */}
-        <div className="grid lg:grid-cols-12 gap-8">
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6 }}
+          className="grid lg:grid-cols-12 gap-8"
+        >
           
           {/* ANNOUNCEMENT BOARD */}
           <div className="lg:col-span-8 space-y-6">
@@ -649,7 +689,7 @@ export default function LandingPage() {
 
           </div>
 
-        </div>
+        </motion.div>
 
       </main>
 

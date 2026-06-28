@@ -81,9 +81,21 @@
         "createdAt": { "type": "string" }
       },
       "required": ["title", "content", "category", "createdAt"]
+    },
+    "Config": {
+      "title": "Config",
+      "description": "Global system configurations",
+      "type": "object",
+      "properties": {
+        "maxSchoolsLimit": { "type": "integer" }
+      }
     }
   },
   "firestore": {
+    "/configs/{configId}": {
+      "schema": "Config",
+      "description": "Global settings"
+    },
     "/schools/{schoolId}": {
       "schema": "School",
       "description": "Registered schools"

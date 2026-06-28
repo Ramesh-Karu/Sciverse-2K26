@@ -24,23 +24,35 @@ export default function RegistrationPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   // Form Fields
-  const [formData, setFormData] = useState({
-    name: '',
-    principalName: '',
-    teacherInCharge: '',
-    teacherInChargeEmail: '',
-    teacherInChargePhone: '',
-    contact: '',
-    whatsapp: '',
-    email: '',
-    address: '',
-    logoUrl: 'https://i.ibb.co/hJp9jZb4/1000192206-imgupscaler-ai-General-8-K.jpg',
-    expectedStudents: 15,
-    expectedTeachers: 2,
-    preferredDay: 'Day 2 - Exhibitions & Practical Labs (July 23)',
-    arrivalTime: '08:30 AM - 09:00 AM',
-    specialRequirements: '',
+  const [formData, setFormData] = useState(() => {
+    const saved = localStorage.getItem('registrationFormData');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {
+      name: '',
+      principalName: '',
+      teacherInCharge: '',
+      teacherInChargeEmail: '',
+      teacherInChargePhone: '',
+      contact: '',
+      whatsapp: '',
+      email: '',
+      address: '',
+      logoUrl: 'https://i.ibb.co/hJp9jZb4/1000192206-imgupscaler-ai-General-8-K.jpg',
+      expectedStudents: 15,
+      expectedTeachers: 2,
+      preferredDay: 'Day 2 - Exhibitions & Practical Labs (July 23)',
+      arrivalTime: '08:30 AM - 09:00 AM',
+      specialRequirements: '',
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('registrationFormData', JSON.stringify(formData));
+  }, [formData]);
 
   // Logins/Bypass status checks
   const [statusEmail, setStatusEmail] = useState('');
@@ -196,6 +208,7 @@ export default function RegistrationPage() {
         quota: 30
       });
 
+      localStorage.removeItem('registrationFormData');
       setIsSubmitted(true);
     } catch (error) {
       console.error("Submitting error: ", error);

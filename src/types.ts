@@ -21,6 +21,8 @@ export interface School {
   quota?: number;
   checkedIn?: boolean;
   checkInTime?: string;
+  actualStudents?: number;
+  actualTeachers?: number;
   createdAt: string;
 }
 
@@ -42,6 +44,7 @@ export interface EventDay {
   name: string;
   capacity: number;
   reservedSeats: number;
+  usedCapacity?: number;
   description?: string;
   isOpenForRegistration?: boolean;
   reservedDetails?: {

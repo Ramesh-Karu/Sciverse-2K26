@@ -1,17 +1,18 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, doc, updateDoc, getDocs, deleteDoc, addDoc, writeBatch, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, getDocs, deleteDoc, addDoc, writeBatch, setDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { School, Participant, EventDay, ArrivalSlot, NotificationLog } from '../types';
 import Navbar from '../components/Navbar';
 import RobotAssistant from '../components/RobotAssistant';
 import { SchoolPassCard, CardSchoolData } from '../components/StylishCardGenerator';
+import QRScanner from '../components/QRScanner';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldAlert, Check, X, Shield, Calendar, Users, Cpu, FileText, 
   Settings, UserCheck, Search, Sliders, Play, TrendingUp, Sparkles, AlertTriangle, RefreshCcw, Download, Trash2, ShieldCheck, QrCode,
-  Mail, MessageSquare
+  Mail, MessageSquare, ChevronDown
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -28,10 +29,11 @@ export default function AdminDashboard() {
 
   // UI state
   const [activeTab, setActiveTab] = useState<'approvals' | 'passes' | 'capacities' | 'checkin' | 'predictions' | 'logs' | 'admins'>('approvals');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [maxSchoolsLimit, setMaxSchoolsLimit] = useState(15);
-  const [isUpdatingLimit, setIsUpdatingLimit] = useState(false);
+  const [isSavingLimit, setIsSavingLimit] = useState(false);
   const [newSlotTime, setNewSlotTime] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
 
@@ -54,6 +56,13 @@ export default function AdminDashboard() {
   // AI Predictor State
   const [aiReport, setAiReport] = useState<any | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // Gate check-in verification modal state
+  const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
+  const [schoolToCheckIn, setSchoolToCheckIn] = useState<School | null>(null);
+  const [actualStudents, setActualStudents] = useState<number>(0);
+  const [actualTeachers, setActualTeachers] = useState<number>(0);
+  const [isFinalizingCheckIn, setIsFinalizingCheckIn] = useState(false);
 
   // Gate check-in scanner search
   const [scannerInput, setScannerInput] = useState('');
@@ -306,6 +315,48 @@ export default function AdminDashboard() {
     });
   };
 
+  // Fetch global config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const configRef = doc(db, 'configs', 'global');
+        const configSnap = await getDoc(configRef);
+        if (configSnap.exists()) {
+          setMaxSchoolsLimit(configSnap.data().maxSchoolsLimit || 15);
+        } else {
+          // Initialize if not exists
+          await setDoc(configRef, { maxSchoolsLimit: 15 });
+        }
+      } catch (err) {
+        console.error("Error fetching config: ", err);
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  // Handle max schools limit change
+  const handleSaveLimit = async () => {
+    if (!isAdmin) {
+      toastError("You do not have permission to change this setting.");
+      return;
+    }
+    setIsSavingLimit(true);
+    try {
+      const configRef = doc(db, 'configs', 'global');
+      await setDoc(configRef, { 
+        maxSchoolsLimit,
+        updatedBy: user?.email,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      success('Maximum school limit updated and saved!');
+    } catch (err: any) {
+      console.error("Error saving limit: ", err);
+      toastError(`Failed to save limit: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsSavingLimit(false);
+    }
+  };
+
   // Handle adding a new arrival slot
   const handleAddArrivalSlot = async (e: FormEvent) => {
     e.preventDefault();
@@ -401,27 +452,49 @@ export default function AdminDashboard() {
     }
   };
 
-  // Perform School delegation gate check-in
-  const performSchoolCheckIn = async (school: School) => {
+  // Initiate check-in process (opens modal)
+  const initiateCheckIn = (school: School) => {
+    setSchoolToCheckIn(school);
+    setActualStudents(school.actualStudents || school.expectedStudents || 0);
+    setActualTeachers(school.actualTeachers || school.expectedTeachers || 0);
+    setIsCheckInModalOpen(true);
+    setScannerResult(null);
+  };
+
+  // Finalize check-in with actual numbers
+  const finalizeCheckIn = async () => {
+    if (!schoolToCheckIn) return;
+    
+    setIsFinalizingCheckIn(true);
     try {
-      const isCheckingIn = !school.checkedIn;
-      const schoolRef = doc(db, 'schools', school.id);
+      const isCheckingIn = !schoolToCheckIn.checkedIn;
+      const schoolRef = doc(db, 'schools', schoolToCheckIn.id);
+      
       await updateDoc(schoolRef, {
         checkedIn: isCheckingIn,
-        checkInTime: isCheckingIn ? new Date().toISOString() : null
+        checkInTime: isCheckingIn ? new Date().toISOString() : null,
+        actualStudents: actualStudents,
+        actualTeachers: actualTeachers
       });
 
       // Update arrival slot count
-      const matchedSlot = arrivalSlots.find(s => s.time === school.arrivalTime);
+      const matchedSlot = arrivalSlots.find(s => s.time === schoolToCheckIn.arrivalTime);
       if (matchedSlot) {
         const slotRef = doc(db, 'arrivalSlots', matchedSlot.id);
         const diff = isCheckingIn ? 1 : -1;
         await updateDoc(slotRef, {
-          currentCount: Math.max(0, matchedSlot.currentCount + diff)
+          currentCount: Math.max(0, (matchedSlot.currentCount || 0) + diff)
         });
       }
-    } catch (err) {
+
+      success(`School "${schoolToCheckIn.name}" delegation ${isCheckingIn ? 'checked in' : 'checked out'} successfully!`);
+      setIsCheckInModalOpen(false);
+      setSchoolToCheckIn(null);
+    } catch (err: any) {
       console.error(err);
+      toastError(`Check-in failed: ${err.message}`);
+    } finally {
+      setIsFinalizingCheckIn(false);
     }
   };
 
@@ -436,9 +509,7 @@ export default function AdminDashboard() {
     // Search for school matching registrationId or document ID
     const foundSchool = schools.find(s => s.registrationId === input || s.id === input);
     if (foundSchool) {
-      await performSchoolCheckIn(foundSchool);
-      const action = !foundSchool.checkedIn ? 'checked in' : 'checked out';
-      setScannerResult(`School "${foundSchool.name}" delegation ${action} successfully! Total allocation: ${foundSchool.expectedStudents || 0} students.`);
+      initiateCheckIn(foundSchool);
       setScannerInput('');
     } else {
       setScannerResult('No registered school found matching this pass registration ID.');
@@ -538,8 +609,8 @@ export default function AdminDashboard() {
   const totalExpectedAttendees = totalExpectedStudents + totalExpectedTeachers;
 
   const checkedInSchools = approvedSchools.filter(s => s.checkedIn);
-  const checkedInStudents = checkedInSchools.reduce((acc, s) => acc + (s.expectedStudents || 0), 0);
-  const checkedInTeachers = checkedInSchools.reduce((acc, s) => acc + (s.expectedTeachers || 0), 0);
+  const checkedInStudents = checkedInSchools.reduce((acc, s) => acc + (s.actualStudents !== undefined ? s.actualStudents : (s.expectedStudents || 0)), 0);
+  const checkedInTeachers = checkedInSchools.reduce((acc, s) => acc + (s.actualTeachers !== undefined ? s.actualTeachers : (s.expectedTeachers || 0)), 0);
   const checkedInAttendees = checkedInStudents + checkedInTeachers;
 
   return (
@@ -583,12 +654,22 @@ export default function AdminDashboard() {
             {/* APPROVED SCHOOLS LIMIT INPUT */}
             <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 backdrop-blur-md">
               <span className="text-[10px] text-slate-400 font-mono uppercase">Max Schools Capacity</span>
-              <input 
-                type="number"
-                value={maxSchoolsLimit}
-                onChange={e => setMaxSchoolsLimit(Number(e.target.value))}
-                className="w-12 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-xs text-white text-center font-mono font-bold"
-              />
+              <div className="flex items-center gap-1.5">
+                <input 
+                  type="number"
+                  value={maxSchoolsLimit}
+                  onChange={e => setMaxSchoolsLimit(Number(e.target.value))}
+                  className="w-12 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-xs text-white text-center font-mono font-bold"
+                />
+                <button
+                  onClick={handleSaveLimit}
+                  disabled={isSavingLimit}
+                  className="p-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded transition cursor-pointer"
+                  title="Save Limit"
+                >
+                  {isSavingLimit ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -631,69 +712,126 @@ export default function AdminDashboard() {
         </div>
 
         {/* TABS CONTROLLER */}
-        <div className="flex gap-2 border-b border-white/10 pb-1 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('approvals')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'approvals' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            Approvals Queue ({pendingSchools.length})
-          </button>
+        <div className="relative mb-6">
+          {/* Mobile Dropdown Button */}
+          <div className="md:hidden">
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-900/60 border border-white/10 rounded-xl text-xs font-bold font-mono uppercase tracking-wider text-blue-400"
+            >
+              <span className="flex items-center gap-2">
+                <Sliders className="w-4 h-4" />
+                {activeTab === 'approvals' && `Approvals Queue (${pendingSchools.length})`}
+                {activeTab === 'passes' && `School QR Passes (${schools.filter(s => s.status === 'approved').length})`}
+                {activeTab === 'capacities' && 'Seating & Capacities'}
+                {activeTab === 'checkin' && 'Gate Check-In'}
+                {activeTab === 'predictions' && 'Gemini Congestion AI'}
+                {activeTab === 'logs' && 'Notification Logs'}
+                {activeTab === 'admins' && 'Admin Management'}
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${isMobileMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
 
-          <button
-            onClick={() => setActiveTab('passes')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'passes' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            School QR Passes ({schools.filter(s => s.status === 'approved').length})
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('capacities')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'capacities' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            Seating & Capacities
-          </button>
+            <AnimatePresence>
+              {isMobileMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl backdrop-blur-xl"
+                >
+                  {[
+                    { id: 'approvals', label: `Approvals Queue (${pendingSchools.length})` },
+                    { id: 'passes', label: `School QR Passes (${schools.filter(s => s.status === 'approved').length})` },
+                    { id: 'capacities', label: 'Seating & Capacities' },
+                    { id: 'checkin', label: 'Gate Check-In' },
+                    { id: 'predictions', label: 'Gemini Congestion AI' },
+                    { id: 'logs', label: 'Notification Logs' },
+                    { id: 'admins', label: 'Admin Management' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id as any);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-3 text-xs font-bold font-mono uppercase tracking-wider transition-colors ${
+                        activeTab === tab.id ? 'bg-blue-500/10 text-blue-400' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-          <button
-            onClick={() => setActiveTab('checkin')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'checkin' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            Gate Check-In
-          </button>
+          {/* Desktop Tabs */}
+          <div className="hidden md:flex gap-2 border-b border-white/10 pb-1 overflow-x-auto scrollbar-hide">
+            <button
+              onClick={() => setActiveTab('approvals')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'approvals' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Approvals Queue ({pendingSchools.length})
+            </button>
 
-          <button
-            onClick={() => setActiveTab('predictions')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'predictions' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            Gemini Congestion AI
-          </button>
+            <button
+              onClick={() => setActiveTab('passes')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'passes' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              School QR Passes ({schools.filter(s => s.status === 'approved').length})
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('capacities')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'capacities' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Seating & Capacities
+            </button>
 
-          <button
-            onClick={() => setActiveTab('logs')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'logs' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            Notification Logs
-          </button>
+            <button
+              onClick={() => setActiveTab('checkin')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'checkin' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Gate Check-In
+            </button>
 
-          <button
-            onClick={() => setActiveTab('admins')}
-            className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'admins' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
-            }`}
-          >
-            Admin Management
-          </button>
+            <button
+              onClick={() => setActiveTab('predictions')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'predictions' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Gemini Congestion AI
+            </button>
+
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'logs' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Notification Logs
+            </button>
+
+            <button
+              onClick={() => setActiveTab('admins')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'admins' ? 'text-blue-400 border-blue-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Admin Management
+            </button>
+          </div>
         </div>
 
         {/* TABS BODIES */}
@@ -1093,28 +1231,42 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
-
             </div>
           )}
 
           {/* TAB 3: GATE CHECK-IN */}
           {activeTab === 'checkin' && (
-            <div className="grid lg:grid-cols-12 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
               
               {/* MAIN INGRESS SCANNER */}
-              <div className="lg:col-span-4 space-y-6">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md space-y-4">
+              <div className="lg:col-span-4 space-y-4 lg:space-y-6">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 lg:p-6 backdrop-blur-md space-y-4">
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono text-blue-400 flex items-center gap-1.5">
-                    <UserCheck className="w-4.5 h-4.5 text-blue-500 animate-pulse" /> Live Ingress Gate Scanner
+                    <UserCheck className="w-4 h-4 lg:w-4.5 lg:h-4.5 text-blue-500 animate-pulse" /> Gate Entry Scanner
                   </h3>
-                  <p className="text-xs text-slate-400">Scan delegation printed Master Pass QR codes or input the Registration ID key to authorize entry.</p>
+                  <p className="text-[11px] lg:text-xs text-slate-400">Scan Master Pass QR or enter Registration ID manually.</p>
 
                   <form onSubmit={handleScannerSubmit} className="space-y-3">
+                    <QRScanner onScanSuccess={(text) => {
+                      setScannerInput(text);
+                      const foundSchool = schools.find(s => s.registrationId === text || s.id === text);
+                      if (foundSchool) {
+                        initiateCheckIn(foundSchool);
+                        setScannerInput('');
+                      }
+                    }} />
+                    
+                    <div className="flex items-center gap-2 my-2">
+                      <div className="h-px bg-white/10 flex-1"></div>
+                      <span className="text-[9px] text-slate-500 font-mono uppercase">OR MANUALLY</span>
+                      <div className="h-px bg-white/10 flex-1"></div>
+                    </div>
+
                     <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-mono mb-1">SCAN TICKET DATA</label>
+                      <label className="block text-[9px] text-slate-400 uppercase font-mono mb-1">REGISTRATION ID</label>
                       <input 
                         type="text"
-                        placeholder="e.g. SV26-xxxx"
+                        placeholder="SV26-xxxx"
                         value={scannerInput}
                         onChange={e => setScannerInput(e.target.value)}
                         className="w-full bg-slate-900 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-3 py-2 text-xs font-mono text-white"
@@ -1129,7 +1281,7 @@ export default function AdminDashboard() {
                   </form>
 
                   {scannerResult && (
-                    <div className={`p-3 rounded-xl border text-xs font-mono ${
+                    <div className={`p-3 rounded-xl border text-[11px] font-mono ${
                       scannerResult.includes('successfully') 
                         ? 'bg-green-500/10 border-green-500/20 text-green-400' 
                         : 'bg-red-500/10 border-red-500/20 text-red-400'
@@ -1140,11 +1292,10 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* OFFICIAL GATE INGRESS PROTOCOLS */}
-                <div className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-2 text-xs text-slate-400 leading-relaxed">
-                  <p className="font-bold text-white font-mono flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-blue-400" /> GATE INGRESS PROTOCOLS:</p>
-                  <p>1. Scan the delegation's official Master Pass QR code using a handheld barcode reader.</p>
-                  <p>2. Alternatively, manually type the delegation's Master Pass ID into the input field above.</p>
-                  <p>3. Confirm matching school credentials and attendance size before checking them in.</p>
+                <div className="p-3 lg:p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-2 text-[10px] lg:text-xs text-slate-400 leading-relaxed">
+                  <p className="font-bold text-white font-mono flex items-center gap-1"><ShieldCheck className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-blue-400" /> PROTOCOLS:</p>
+                  <p>1. Scan the delegation's official Master Pass QR code.</p>
+                  <p>2. Verify attendance size before checking in.</p>
                 </div>
               </div>
 
@@ -1152,8 +1303,8 @@ export default function AdminDashboard() {
               <div className="lg:col-span-8 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div>
-                    <h3 className="text-lg font-bold text-white">Security Check-In Gate Manifest</h3>
-                    <p className="text-xs text-slate-400">Search and toggle school delegation gate-entry status in real-time</p>
+                    <h3 className="text-base lg:text-lg font-bold text-white">Gate Entry Manifest</h3>
+                    <p className="text-[11px] lg:text-xs text-slate-400">Search and toggle school delegation status</p>
                   </div>
 
                   <div className="relative w-full sm:w-64">
@@ -1168,15 +1319,15 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto border border-white/10 rounded-xl bg-white/5 backdrop-blur-md max-h-[450px]">
-                  <table className="w-full text-left border-collapse text-xs">
+                <div className="overflow-x-auto scrollbar-hide border border-white/10 rounded-xl bg-white/5 backdrop-blur-md max-h-[400px] lg:max-h-[450px]">
+                  <table className="w-full text-left border-collapse text-[11px] lg:text-xs min-w-[650px]">
                     <thead>
-                      <tr className="text-[10px] text-slate-500 font-mono uppercase tracking-widest border-b border-white/5 bg-slate-900/40">
+                      <tr className="text-[9px] lg:text-[10px] text-slate-500 font-mono uppercase tracking-widest border-b border-white/5 bg-slate-900/40">
                         <th className="py-2.5 px-3">School Name</th>
                         <th className="py-2.5 px-3">Arrival Schedule</th>
                         <th className="py-2.5 px-3 text-center">Allotment</th>
-                        <th className="py-2.5 px-3">Master Pass ID</th>
-                        <th className="py-2.5 px-3 text-right">Pass Status</th>
+                        <th className="py-2.5 px-3">Master ID</th>
+                        <th className="py-2.5 px-3 text-right">Gate Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -1190,18 +1341,24 @@ export default function AdminDashboard() {
                           const ticketKey = s.registrationId || s.id;
                           
                           return (
-                            <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                              <td className="py-2.5 px-3 font-semibold text-white">{s.name}</td>
-                              <td className="py-2.5 px-3 font-mono text-[10px] text-slate-300">
-                                {s.preferredDay} ({s.arrivalTime})
+                            <tr key={s.id} className="hover:bg-white/5 transition-colors group">
+                              <td className="py-2 px-3 font-semibold text-white max-w-[150px] truncate">{s.name}</td>
+                              <td className="py-2 px-3">
+                                <span className="text-slate-300 block">{s.preferredDay}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{s.arrivalTime}</span>
                               </td>
-                              <td className="py-2.5 px-3 text-slate-300 font-mono text-center">
-                                {s.expectedStudents || 0} Students / {s.expectedTeachers || 0} Teachers
+                              <td className="py-2 px-3 text-center">
+                                <div className="flex flex-col">
+                                  <span className="text-blue-400 font-bold">{Number(s.expectedStudents || 0) + Number(s.expectedTeachers || 0)}</span>
+                                  <span className="text-[8px] text-slate-500 font-mono uppercase">Delegates</span>
+                                </div>
                               </td>
-                              <td className="py-2.5 px-3 font-mono text-slate-500 text-[10px]">{ticketKey}</td>
-                              <td className="py-2.5 px-3 text-right">
+                              <td className="py-2 px-3">
+                                <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-1.5 py-0.5 rounded border border-white/5">{ticketKey}</span>
+                              </td>
+                              <td className="py-2 px-3 text-right">
                                 <button
-                                  onClick={() => performSchoolCheckIn(s)}
+                                  onClick={() => initiateCheckIn(s)}
                                   className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer ${
                                     s.checkedIn 
                                       ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' 
@@ -1218,7 +1375,6 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </div>
-
             </div>
           )}
 
@@ -1530,6 +1686,111 @@ export default function AdminDashboard() {
                   </svg>
                   Send via WhatsApp
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* GATE CHECK-IN VERIFICATION MODAL */}
+      <AnimatePresence>
+        {isCheckInModalOpen && schoolToCheckIn && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCheckInModalOpen(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+            />
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 space-y-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      <ShieldCheck className="w-6 h-6 text-blue-400" /> Gate Verification
+                    </h3>
+                    <p className="text-sm text-slate-400">Confirm delegation credentials</p>
+                  </div>
+                  <button 
+                    onClick={() => setIsCheckInModalOpen(false)}
+                    className="p-2 hover:bg-white/5 rounded-lg text-slate-400 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="bg-white/5 border border-white/5 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-xs text-slate-500 uppercase font-mono">School</span>
+                    <span className="text-sm font-bold text-white">{schoolToCheckIn.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-slate-500 uppercase font-mono">Reg ID</span>
+                    <span className="text-xs font-mono text-blue-400">{schoolToCheckIn.registrationId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-slate-500 uppercase font-mono">Expected Students</span>
+                    <span className="text-sm font-bold text-white">{schoolToCheckIn.expectedStudents}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest font-mono">Actual Attendance</h4>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-slate-500 uppercase font-mono">Actual Students</label>
+                      <input 
+                        type="number"
+                        value={actualStudents}
+                        onChange={e => setActualStudents(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-white font-mono focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-slate-500 uppercase font-mono">Actual Teachers</label>
+                      <input 
+                        type="number"
+                        value={actualTeachers}
+                        onChange={e => setActualTeachers(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-white font-mono focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setIsCheckInModalOpen(false)}
+                    className="flex-1 py-3 border border-white/10 text-slate-300 font-bold rounded-xl text-xs font-mono uppercase transition hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={finalizeCheckIn}
+                    disabled={isFinalizingCheckIn}
+                    className={`flex-[2] py-3 font-bold rounded-xl text-xs font-mono uppercase tracking-wider transition flex items-center justify-center gap-2 ${
+                      schoolToCheckIn.checkedIn
+                        ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                    }`}
+                  >
+                    {isFinalizingCheckIn ? (
+                      <RefreshCcw className="w-4 h-4 animate-spin" />
+                    ) : schoolToCheckIn.checkedIn ? (
+                      'Check Out Delegation'
+                    ) : (
+                      'Authorize Check-In'
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

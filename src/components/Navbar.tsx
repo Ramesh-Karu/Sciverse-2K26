@@ -2,13 +2,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LogOut, Monitor, School, Shield, User, Bell } from 'lucide-react';
-import { motion } from 'motion/react';
+import { LogOut, Monitor, School, Shield, User, Bell, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useState } from 'react';
 
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAdmin } = useAuth();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -109,7 +111,7 @@ export default function Navbar() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleLogout}
-              className="p-2 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-white/5 hover:border-red-500/20"
+              className="p-2 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-white/5 hover:border-red-500/20 hidden sm:flex"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -129,13 +131,79 @@ export default function Navbar() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/register?login=true')}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.4)] transition"
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.4)] transition hidden sm:block"
             >
               Portal Login
             </motion.button>
           </div>
         )}
+
+        {/* Mobile Menu Toggle */}
+        <button 
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          className="md:hidden p-2 text-slate-400 hover:text-white transition-colors"
+        >
+          {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
       </div>
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/10 rounded-2xl p-6 shadow-2xl backdrop-blur-2xl z-[60] md:hidden space-y-4"
+          >
+            <button 
+              onClick={() => { navigate('/'); setIsMenuOpen(false); }} 
+              className={`w-full text-left py-3 text-sm font-medium border-b border-white/5 ${
+                location.pathname === '/' ? 'text-blue-400' : 'text-slate-300'
+              }`}
+            >
+              Home
+            </button>
+            <button 
+              onClick={() => { navigate('/register'); setIsMenuOpen(false); }} 
+              className={`w-full text-left py-3 text-sm font-medium border-b border-white/5 ${
+                location.pathname === '/register' ? 'text-blue-400' : 'text-slate-300'
+              }`}
+            >
+              School Registration
+            </button>
+            
+            {user && (
+              <button 
+                onClick={() => { navigate(isAdmin ? '/admin' : '/dashboard'); setIsMenuOpen(false); }} 
+                className={`w-full text-left py-3 text-sm font-medium border-b border-white/5 ${
+                  location.pathname.startsWith('/admin') || location.pathname.startsWith('/dashboard') ? 'text-blue-400' : 'text-slate-300'
+                }`}
+              >
+                {isAdmin ? 'Admin Console' : 'School Portal'}
+              </button>
+            )}
+
+            {!user && (
+              <button 
+                onClick={() => { navigate('/register?login=true'); setIsMenuOpen(false); }} 
+                className="w-full py-3 bg-blue-600 text-white text-sm font-bold rounded-xl text-center shadow-lg"
+              >
+                Portal Login
+              </button>
+            )}
+
+            {user && (
+              <button 
+                onClick={() => { handleLogout(); setIsMenuOpen(false); }} 
+                className="w-full py-3 bg-red-500/10 text-red-400 text-sm font-bold rounded-xl border border-red-500/20 text-center"
+              >
+                Sign Out
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 }

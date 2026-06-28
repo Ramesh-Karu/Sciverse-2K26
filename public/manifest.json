@@ -1,0 +1,22 @@
+{
+  "name": "SU JHC - Science Union Portal",
+  "short_name": "SU JHC",
+  "description": "Science Union, Jaffna Hindu College Registration & RSVP Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.ibb.co/hJp9jZb4/1000192206-imgupscaler-ai-General-8-K.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
