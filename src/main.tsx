@@ -12,10 +12,17 @@ createRoot(document.getElementById('root')!).render(
 // Unregister Service Workers and clear caches to prevent black/blank screens and caching issues
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) {
-      registration.unregister().then(() => {
-        console.log('Successfully unregistered service worker');
-      });
+    if (registrations.length > 0) {
+      for (const registration of registrations) {
+        registration.unregister().then(() => {
+          console.log('Successfully unregistered service worker');
+        });
+      }
+      const reloadCount = sessionStorage.getItem('sw_reload_count') || '0';
+      if (parseInt(reloadCount, 10) < 2) {
+        sessionStorage.setItem('sw_reload_count', (parseInt(reloadCount, 10) + 1).toString());
+        window.location.reload();
+      }
     }
   });
 }
