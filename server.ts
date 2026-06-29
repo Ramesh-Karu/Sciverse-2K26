@@ -10,6 +10,15 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Strict no-cache middleware for all HTTP responses
+app.use((req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.set("Surrogate-Control", "no-store");
+  next();
+});
+
 // Initialize Google GenAI client
 const apiKey = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({
