@@ -342,11 +342,13 @@ export async function sendConfirmationEmail(schoolData: any) {
       <li style="margin-bottom: 8px;">Log into the school portal using your <strong>School Registration Code (${registrationId})</strong> to add specific student name rosters and download individual smart ID badges.</li>
       `}
       <li style="margin-bottom: 8px;">Please arrive strictly during your scheduled time slot to avoid main-gate congestion.</li>
+      <li style="margin-bottom: 8px; color: #25d366; font-weight: bold;">Join the official SciVerse WhatsApp Updates Group for announcements: <a href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l" style="color: #60a5fa; text-decoration: underline;">https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l</a></li>
       <li style="margin-bottom: 8px; color: #facc15;">If you do not see the confirmation email in your inbox, please check your spam or junk folder.</li>
     </ul>
     
     <div class="button-container">
       <a href="https://sujhc.site/?login=${id}${isSolo ? '&solo=true' : ''}" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Go to Portal</a>
+      <a href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l" class="button" style="background-color: #25d366; box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3); margin-left: 10px;">Join WhatsApp Updates</a>
       <a href="https://sujhc.site" class="button" style="background-color: #3b82f6; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3); margin-left: 10px;">Visit Website</a>
     </div>
   `;

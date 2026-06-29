@@ -8,7 +8,7 @@ import RobotAssistant from '../components/RobotAssistant';
 import { SchoolPassCard } from '../components/StylishCardGenerator';
 import { motion } from 'motion/react';
 import { 
-  Clock, Calendar, Sparkles, ShieldCheck, AlertTriangle, Info, QrCode, Download
+  Clock, Calendar, Sparkles, ShieldCheck, AlertTriangle, Info, QrCode, Download, MessageCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -229,6 +229,14 @@ export default function SchoolDashboard() {
               )}
             </button>
             <a
+              href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white border border-green-500 rounded-xl text-xs font-bold font-mono uppercase flex items-center gap-2 shadow-[0_4px_15px_rgba(34,197,94,0.3)] cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4" /> Join WhatsApp Group
+            </a>
+            <a
               href="#pass-card-section"
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-xl text-xs font-bold font-mono uppercase flex items-center gap-2 cursor-pointer"
             >
@@ -407,7 +415,7 @@ export default function SchoolDashboard() {
           </div>
 
           {/* MASTER QR DELEGATION PASS CARD */}
-          <div className="lg:col-span-5 space-y-4">
+          <div id="pass-card-section" className="lg:col-span-5 space-y-4">
             <div>
               <h3 className="text-lg font-bold text-white">{isSolo ? 'Your Personal Entry Pass' : 'Your Institutional Master Pass'}</h3>
               <p className="text-xs text-slate-400">Download, print or show this portrait pass at the registration desk</p>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import QRCode from 'qrcode';
-import { Download, Sparkles, CheckCircle, Clock, Copy, Check } from 'lucide-react';
+import { Download, Sparkles, CheckCircle, Clock, Copy, Check, MessageCircle } from 'lucide-react';
 
 export interface CardSchoolData {
   id: string;
@@ -408,15 +408,11 @@ export const SchoolPassCard: React.FC<SchoolPassCardProps> = ({ school, classNam
       </div>
 
       {/* Action triggers */}
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 pt-1">
         <button
           onClick={handleDownload}
           disabled={isGenerating}
-          className={`flex-1 py-2 text-[10px] font-bold font-mono uppercase tracking-wider rounded-xl border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-            isApproved 
-              ? 'bg-blue-600 border-blue-500 hover:bg-blue-500 text-white' 
-              : 'bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300'
-          }`}
+          className="w-full py-2.5 text-[10px] font-bold font-mono uppercase tracking-wider rounded-xl border border-blue-800 bg-blue-900 hover:bg-blue-850 text-white shadow-[0_4px_12px_rgba(30,58,138,0.4)] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
         >
           {isGenerating ? (
             <span className="flex items-center gap-1">
@@ -430,6 +426,16 @@ export const SchoolPassCard: React.FC<SchoolPassCardProps> = ({ school, classNam
             </>
           )}
         </button>
+
+        <a
+          href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full py-2.5 text-[10px] font-bold font-mono uppercase tracking-wider rounded-xl border border-green-500/30 bg-green-600 hover:bg-green-500 text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_4px_12px_rgba(34,197,94,0.2)]"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          Join WhatsApp Updates
+        </a>
       </div>
     </div>
   );

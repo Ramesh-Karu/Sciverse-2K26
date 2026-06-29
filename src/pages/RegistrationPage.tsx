@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Building, User, Mail, Phone, MapPin, Calendar, Clock, 
   Sparkles, CheckCircle2, ChevronRight, ChevronLeft, Upload, FileText, 
-  HelpCircle, Shield, AlertCircle, Users
+  HelpCircle, Shield, AlertCircle, Users, MessageCircle
 } from 'lucide-react';
 
 export default function RegistrationPage() {
@@ -1076,7 +1076,17 @@ export default function RegistrationPage() {
                     <p>3. <span className="text-white font-bold">Important:</span> Bring your school ID and be in uniform for gate check-in.</p>
                   </div>
 
-                  <div className="flex justify-center gap-3 pt-4">
+                  <div className="flex flex-col sm:flex-row justify-center gap-3 pt-4">
+                    <motion.a
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs font-bold font-mono uppercase cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(34,197,94,0.3)]"
+                    >
+                      <MessageCircle className="w-4 h-4 shrink-0" /> Join WhatsApp Updates Group
+                    </motion.a>
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
