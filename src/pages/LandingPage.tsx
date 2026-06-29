@@ -18,25 +18,59 @@ import {
 export default function LandingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const directLoginId = searchParams.get('login')?.trim();
+  const isSoloParam = searchParams.get('solo') === 'true';
   
-  // Stats
-  const [totalSchools, setTotalSchools] = useState(0);
-  const [totalParticipants, setTotalParticipants] = useState(0);
-  const [attendanceEst, setAttendanceEst] = useState(94.2);
-  const [capacityUsed, setCapacityUsed] = useState(70);
-  const [remainingCapacity, setRemainingCapacity] = useState(358);
-  const [totalApproved, setTotalApproved] = useState(0);
-
   // Firestore Data lists
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [eventDays, setEventDays] = useState<EventDay[]>([]);
   const [schoolsList, setSchoolsList] = useState<SchoolType[]>([]);
   const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
 
+  // Derived dynamic stats calculated pure/synchronously on every render to prevent timing and async database call issues
+  const totalSchools = schoolsList.length;
+  const approvedSchools = schoolsList.filter((s: any) => s.status === 'approved');
+  const totalApproved = approvedSchools.length;
+
+  let schoolParticipants = 0;
+  approvedSchools.forEach(s => {
+    schoolParticipants += (s.expectedStudents || 0) + (s.expectedTeachers || 0);
+  });
+
+  let totalCap = 0;
+  let internalReserved = 0;
+  eventDays.forEach((d: any) => {
+    totalCap += (d.capacity || 0);
+    internalReserved += (d.reservedSeats || 0);
+  });
+
+  const totalParticipants = schoolParticipants + internalReserved;
+  const capacityUsed = totalCap > 0 ? Math.round((totalParticipants / totalCap) * 100) : 70;
+  const remainingCapacity = Math.max(0, totalCap - totalParticipants);
+
+  // Compute real RSVP response rate
+  const rsvped = approvedSchools.filter((s: any) => s.preferredDay && s.arrivalTime).length;
+  const attendanceEst = totalApproved > 0 ? Math.round((rsvped / totalApproved) * 100) : 100;
+
+  // Add combinedReserved dynamically to eventDays on render
+  const displayEventDays = eventDays.map(d => {
+    let dayParticipants = 0;
+    approvedSchools.forEach(s => {
+      if (s.preferredDay === d.name) {
+        dayParticipants += (s.expectedStudents || 0) + (s.expectedTeachers || 0);
+      }
+    });
+    return {
+      ...d,
+      combinedReserved: (d.reservedSeats || 0) + dayParticipants
+    };
+  });
+
   // Auth / Login Simulation for Coordinators
   const [regIdInput, setRegIdInput] = useState('');
   const [coordinatorError, setCoordinatorError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(!!directLoginId);
 
   // Seeding trigger
   useEffect(() => {
@@ -55,76 +89,17 @@ export default function LandingPage() {
     });
 
     // Read Event Days
-    const unsubDays = onSnapshot(collection(db, 'eventDays'), async (snapshot) => {
+    const unsubDays = onSnapshot(collection(db, 'eventDays'), (snapshot) => {
       const days = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventDay));
       setEventDays(days);
-
-      // Compute dynamic seating capacity used and total participants
-      let totalCap = 0;
-      let internalReserved = 0;
-      
-      // Map to store reserved seats per day name
-      const dayReservedMap: Record<string, number> = {};
-      days.forEach((d: any) => {
-        totalCap += (d.capacity || 0);
-        internalReserved += (d.reservedSeats || 0);
-        dayReservedMap[d.name] = (d.reservedSeats || 0);
-      });
-
-      // Fetch all approved schools to get total school participants per day
-      const schoolsQuery = query(collection(db, 'schools'), where('status', '==', 'approved'));
-      const schoolsSnap = await getDocs(schoolsQuery);
-      let schoolParticipants = 0;
-      
-      schoolsSnap.forEach(doc => {
-        const s = doc.data();
-        const pCount = (s.expectedStudents || 0) + (s.expectedTeachers || 0);
-        schoolParticipants += pCount;
-        
-        // Add to the corresponding day in the map
-        const dayName = s.preferredDay;
-        if (dayName && dayReservedMap[dayName] !== undefined) {
-            dayReservedMap[dayName] += pCount;
-        } else {
-            // Default to first day if preferredDay is missing or doesn't match
-            if (days.length > 0) {
-                dayReservedMap[days[0].name] += pCount;
-            }
-        }
-      });
-
-      setTotalParticipants(schoolParticipants + internalReserved);
-      
-      // Update eventDays with the combined reserved count
-      const updatedEventDays = days.map(d => ({
-          ...d,
-          combinedReserved: dayReservedMap[d.name] || (d.reservedSeats || 0)
-      }));
-      setEventDays(updatedEventDays);
-      
-      if (totalCap > 0) {
-        setCapacityUsed(Math.round(((schoolParticipants + internalReserved) / totalCap) * 100));
-      }
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'eventDays');
     });
 
     // Read Schools to compute statistics
-    const unsubSchools = onSnapshot(collection(db, 'schools'), async (snapshot) => {
-      const schools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const unsubSchools = onSnapshot(collection(db, 'schools'), (snapshot) => {
+      const schools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolType));
       setSchoolsList(schools);
-      setTotalSchools(schools.length);
-      
-      const approved = schools.filter((s: any) => s.status === 'approved');
-      setTotalApproved(approved.length);
-
-      // Compute real RSVP response rate
-      const rsvped = approved.filter((s: any) => s.preferredDay && s.arrivalTime).length;
-      if (approved.length > 0) {
-        setAttendanceEst(Math.round((rsvped / approved.length) * 100));
-      } else {
-        setAttendanceEst(100);
-      }
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'schools');
     });
@@ -194,10 +169,6 @@ export default function LandingPage() {
       console.error(err);
     }
   };
-
-  const [searchParams] = useSearchParams();
-  const directLoginId = searchParams.get('login')?.trim();
-  const isSoloParam = searchParams.get('solo') === 'true';
 
   useEffect(() => {
     if (directLoginId) {
@@ -750,7 +721,7 @@ export default function LandingPage() {
             </div>
 
             <div className="space-y-4">
-              {eventDays.map((day) => (
+              {displayEventDays.map((day) => (
                 <div key={day.id} className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-3">
                   <div className="flex justify-between items-start gap-2">
                     <div>
