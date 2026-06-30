@@ -26,6 +26,7 @@ export default function RegistrationPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Form Fields
   const [formData, setFormData] = useState(() => {
@@ -242,6 +243,10 @@ export default function RegistrationPage() {
       } else if (step === 3) {
         if (!studentData.parentName.trim() || !studentData.parentContact.trim()) {
           setErrorMessage('Parent/Guardian details are required for solo student participation.');
+          return false;
+        }
+        if (!acceptedTerms) {
+          setErrorMessage('You must read and accept the terms and code of conduct to complete your registration.');
           return false;
         }
       }
@@ -565,6 +570,7 @@ export default function RegistrationPage() {
                       onClick={() => {
                         setRegistrationType(null);
                         setStep(1);
+                        setAcceptedTerms(false);
                       }}
                       className="text-[10px] text-slate-500 hover:text-white transition flex items-center gap-1 font-mono uppercase"
                     >
@@ -1053,10 +1059,15 @@ export default function RegistrationPage() {
                               </div>
                             </div>
 
-                            <div className="p-4 bg-slate-900/60 border border-white/10 rounded-2xl">
+                            <div className={`p-4 bg-slate-900/60 border ${!acceptedTerms && errorMessage.includes('accept the terms') ? 'border-red-500/50 bg-red-500/5' : 'border-white/10'} rounded-2xl transition-all duration-200`}>
                               <label className="flex items-start gap-3 cursor-pointer">
-                                <input type="checkbox" required className="mt-1 w-4 h-4 rounded border-white/20 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
-                                <span className="text-[10px] text-slate-400 leading-relaxed">
+                                <input 
+                                  type="checkbox" 
+                                  checked={acceptedTerms}
+                                  onChange={e => setAcceptedTerms(e.target.checked)}
+                                  className="mt-1 w-4 h-4 rounded border-white/20 bg-slate-800 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                />
+                                <span className="text-[11px] text-slate-300 leading-relaxed select-none">
                                   I hereby confirm that I will be attending SciVerse 2K26 in my official school uniform, strictly adhering to the code of conduct, and I will be accompanied by the parent/guardian mentioned above at all times during the event.
                                 </span>
                               </label>
