@@ -333,14 +333,6 @@ export default function AdminDashboard() {
         console.error("Failed to automatically dispatch confirmation WhatsApp:", waErr);
       }
 
-      // Open the elegant WhatsApp trigger modal
-      setWaModalData({
-        phone: school.whatsapp || school.contact || '',
-        message: getWhatsAppMessage(school, regId),
-        schoolName: school.name,
-        registrationId: regId
-      });
-
       success(`Approved: ${school.name}. Assigned Reg ID: ${regId}`);
     } catch (err) {
       console.error(err);
@@ -697,9 +689,6 @@ export default function AdminDashboard() {
       } catch (waErr) {
         console.error("Failed to automatically dispatch confirmation WhatsApp:", waErr);
       }
-
-      // Open the elegant WhatsApp trigger modal
-      handleTriggerWhatsAppSolo(student);
 
       success(`Approved solo student: ${student.name}`);
     } catch (err) {
