@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldAlert, Check, X, Shield, Calendar, Users, Cpu, FileText, 
   Settings, UserCheck, Search, Sliders, Play, TrendingUp, Sparkles, AlertTriangle, RefreshCcw, Download, Trash2, ShieldCheck, QrCode,
-  Mail, MessageSquare, ChevronDown, User, Phone
+  Mail, MessageSquare, ChevronDown, User, Phone, Loader2, MessageCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -46,6 +46,101 @@ export default function AdminDashboard() {
     schoolName: string;
     registrationId: string;
   } | null>(null);
+
+  const [isSendingWa, setIsSendingWa] = useState(false);
+  const [waApiError, setWaApiError] = useState<string | null>(null);
+  const [waApiSuccess, setWaApiSuccess] = useState<string | null>(null);
+
+  // WAHA Overrides State
+  const [wahaUrlOverride, setWahaUrlOverride] = useState(() => localStorage.getItem("waha_url_override") || "");
+  const [wahaKeyOverride, setWahaKeyOverride] = useState(() => localStorage.getItem("waha_key_override") || "");
+  const [wahaSessionOverride, setWahaSessionOverride] = useState(() => localStorage.getItem("waha_session_override") || "");
+  const [showWahaSettings, setShowWahaSettings] = useState(false);
+
+  const getWahaHeaders = (baseHeaders: Record<string, string> = {}) => {
+    const headers = { ...baseHeaders };
+    if (wahaUrlOverride) headers["x-waha-url-override"] = wahaUrlOverride;
+    if (wahaKeyOverride) headers["x-waha-key-override"] = wahaKeyOverride;
+    if (wahaSessionOverride) headers["x-waha-session-override"] = wahaSessionOverride;
+    return headers;
+  };
+
+  useEffect(() => {
+    if (!waModalData) {
+      setIsSendingWa(false);
+      setWaApiError(null);
+      setWaApiSuccess(null);
+    }
+  }, [waModalData]);
+
+  const handleSendWaApi = async () => {
+    if (!waModalData) return;
+    setIsSendingWa(true);
+    setWaApiError(null);
+    setWaApiSuccess(null);
+
+    try {
+      const response = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: getWahaHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          phone: waModalData.phone,
+          message: waModalData.message,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        if (response.status === 412) {
+          setWaApiError("API NOT CONFIGURED: Please define either WAHA API details, Meta Cloud API keys, or Twilio keys in your environment variables.");
+        } else {
+          setWaApiError(data.error || "Failed to dispatch message via API.");
+        }
+      } else {
+        setWaApiSuccess(`Dispatched successfully via ${data.provider.toUpperCase()} API!`);
+      }
+    } catch (err) {
+      console.error(err);
+      setWaApiError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSendingWa(false);
+    }
+  };
+
+  const [wahaCheckLoading, setWahaCheckLoading] = useState(false);
+  const [wahaStatusData, setWahaStatusData] = useState<{
+    success: boolean;
+    connected: boolean;
+    status: string;
+    error?: string;
+    wahaApiUrl?: string;
+    session?: any;
+    allSessions?: any[];
+  } | null>(null);
+
+  const handleCheckWahaStatus = async () => {
+    setWahaCheckLoading(true);
+    setWahaStatusData(null);
+    try {
+      const response = await fetch("/api/whatsapp/status", {
+        headers: getWahaHeaders()
+      });
+      const data = await response.json();
+      setWahaStatusData(data);
+    } catch (err) {
+      console.error(err);
+      setWahaStatusData({
+        success: false,
+        connected: false,
+        status: "UNREACHABLE",
+        error: err instanceof Error ? err.message : String(err)
+      });
+    } finally {
+      setWahaCheckLoading(false);
+    }
+  };
 
   const getWhatsAppMessage = (school: School, regId: string) => {
     const preferredDay = school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)';
@@ -205,6 +300,20 @@ export default function AdminDashboard() {
         });
       } catch (emailErr) {
         console.error("Failed to automatically dispatch confirmation email:", emailErr);
+      }
+
+      // Automatically dispatch WhatsApp confirmation message
+      try {
+        await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: getWahaHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            phone: school.whatsapp || school.contact || '',
+            message: getWhatsAppMessage(school, regId)
+          })
+        });
+      } catch (waErr) {
+        console.error("Failed to automatically dispatch confirmation WhatsApp:", waErr);
       }
 
       // Open the elegant WhatsApp trigger modal
@@ -542,6 +651,20 @@ export default function AdminDashboard() {
         });
       } catch (logErr) {
         handleFirestoreError(logErr, OperationType.CREATE, 'notificationLogs');
+      }
+
+      // Automatically dispatch WhatsApp confirmation message
+      try {
+        await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: getWahaHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            phone: student.whatsapp || student.contact || '',
+            message: getWhatsAppMessageSolo(student, regId)
+          })
+        });
+      } catch (waErr) {
+        console.error("Failed to automatically dispatch confirmation WhatsApp:", waErr);
       }
 
       // Open the elegant WhatsApp trigger modal
@@ -1890,11 +2013,158 @@ export default function AdminDashboard() {
 
           {/* TAB 5: AUDIT LOGS */}
           {activeTab === 'logs' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-bold text-white">System Notification Logs</h3>
-                <p className="text-xs text-slate-400">Review email notification triggers sent during approvals, updates, and invitations</p>
+            <div className="space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">System Notification Logs</h3>
+                  <p className="text-xs text-slate-400">Review email and WhatsApp notification triggers sent during approvals, updates, and invitations</p>
+                </div>
+
+                {/* WAHA Connection Checker Trigger */}
+                <button
+                  disabled={wahaCheckLoading}
+                  onClick={handleCheckWahaStatus}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-slate-950 text-xs font-bold font-mono uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-green-500/10"
+                >
+                  {wahaCheckLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      Checking Connection...
+                    </>
+                  ) : (
+                    <>
+                      <Cpu className="w-4 h-4 shrink-0" />
+                      Check WAHA Connection
+                    </>
+                  )}
+                </button>
               </div>
+
+              {/* WAHA CONFIG OVERRIDES PANEL */}
+              <div className="border border-white/5 rounded-2xl bg-slate-950/40 p-5 space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setShowWahaSettings(!showWahaSettings)}
+                  className="w-full flex items-center justify-between text-left cursor-pointer"
+                >
+                  <div>
+                    <h4 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-slate-400 animate-pulse" /> WAHA Connection Settings Overrides
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      If your WAHA server uses a hashed API Key, enter the <strong>raw, unhashed API Key</strong> here.
+                    </p>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${showWahaSettings ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showWahaSettings && (
+                  <div className="pt-4 grid md:grid-cols-3 gap-4 border-t border-white/5 animate-slideDown">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">WAHA Server URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://devlikeaprowaha-production-5bc7.up.railway.app"
+                        value={wahaUrlOverride}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setWahaUrlOverride(val);
+                          localStorage.setItem("waha_url_override", val);
+                        }}
+                        className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-green-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        Raw API Key (Unhashed)
+                        {wahaKeyOverride.startsWith("sha512:") && (
+                          <span className="text-[9px] text-red-400 lowercase font-sans">⚠️ should be raw, not sha512: hash</span>
+                        )}
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="your_raw_api_key (leave blank if none, or 'none')"
+                        value={wahaKeyOverride}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setWahaKeyOverride(val);
+                          localStorage.setItem("waha_key_override", val);
+                        }}
+                        className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-green-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Target Session Name</label>
+                      <input
+                        type="text"
+                        placeholder="default"
+                        value={wahaSessionOverride}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setWahaSessionOverride(val);
+                          localStorage.setItem("waha_session_override", val);
+                        }}
+                        className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-green-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* WAHA STATUS WIDGET DISPLAY */}
+              {wahaStatusData && (
+                <div className="border border-white/10 rounded-2xl bg-slate-900 p-5 space-y-4 animate-fadeIn">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h4 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-emerald-400" /> WAHA Engine Diagnostics
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-1">Status check query dispatched to <code className="text-slate-300 font-mono bg-slate-950 px-1 py-0.5 rounded text-[10px]">{wahaStatusData.wahaApiUrl}</code></p>
+                    </div>
+
+                    <div>
+                      {wahaStatusData.connected ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          🟢 Online & Working
+                        </span>
+                      ) : wahaStatusData.status === "SCAN_QR" ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono uppercase tracking-wider bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                          🟡 Scan QR Code
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
+                          🔴 Offline ({wahaStatusData.status || "UNREACHABLE"})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4 text-xs font-mono">
+                    <div className="bg-slate-950/40 border border-white/5 p-3 rounded-xl space-y-1.5">
+                      <p className="text-slate-400">Target Session: <strong className="text-white">{wahaStatusData.session?.name || "default"}</strong></p>
+                      <p className="text-slate-400">Connection State: <strong className={wahaStatusData.connected ? "text-emerald-400" : "text-amber-400"}>{wahaStatusData.status || "UNKNOWN"}</strong></p>
+                    </div>
+
+                    <div className="bg-slate-950/40 border border-white/5 p-3 rounded-xl space-y-1.5">
+                      {wahaStatusData.connected ? (
+                        <p className="text-emerald-400 leading-normal font-sans">
+                          🎉 Perfect! The WhatsApp Web engine is connected and ready to send instant automated notifications to your delegation and solo registrants.
+                        </p>
+                      ) : wahaStatusData.status === "SCAN_QR" ? (
+                        <p className="text-amber-300 leading-normal font-sans">
+                          ⚠️ Action Required: Your WhatsApp session is initialized but requires phone pairing. Scan the QR code or link your device inside your WAHA web interface.
+                        </p>
+                      ) : (
+                        <p className="text-red-400 leading-normal font-sans">
+                          ❌ Connection Failure: {wahaStatusData.error || "The server could not establish a connection to your custom WAHA engine. Make sure the container is healthy and process.env variables are correctly injected."}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3 border border-white/10 rounded-xl bg-white/5 p-4 max-h-[500px] overflow-y-auto">
                 {logs.length === 0 ? (
@@ -2032,7 +2302,7 @@ export default function AdminDashboard() {
 
       </main>
 
-      {/* WhatsApp Manual Notification Dispatcher Modal */}
+      {/* WhatsApp Manual & API Notification Dispatcher Modal */}
       <AnimatePresence>
         {waModalData && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
@@ -2040,15 +2310,15 @@ export default function AdminDashboard() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative space-y-4"
+              className="bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-start">
                 <div className="flex gap-3 items-center">
                   <div className="p-2.5 bg-green-500/10 border border-green-500/20 rounded-xl">
-                    <QrCode className="w-6 h-6 text-green-400" />
+                    <MessageSquare className="w-6 h-6 text-green-400" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white leading-tight">Registration Approved!</h3>
+                    <h3 className="text-lg font-bold text-white leading-tight">WhatsApp Notification Portal</h3>
                     <p className="text-xs text-slate-400">For {waModalData.schoolName}</p>
                   </div>
                 </div>
@@ -2060,13 +2330,40 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              <div className="bg-emerald-950/20 border border-emerald-500/10 rounded-xl p-3 text-xs text-emerald-300 leading-relaxed">
-                ✨ <strong>Notification Status:</strong> An automated, styled HTML confirmation email has been dispatched to the school delegation contact address.
-              </div>
+              {/* Status Banner */}
+              {waApiSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3.5 text-xs text-emerald-400 leading-relaxed flex items-start gap-2 animate-fadeIn">
+                  <Check className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Success:</strong> {waApiSuccess}
+                  </div>
+                </div>
+              )}
+
+              {waApiError && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5 text-xs text-amber-300 leading-relaxed space-y-2 animate-fadeIn">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                    <div>
+                      <strong>API Alert:</strong> {waApiError}
+                    </div>
+                  </div>
+                  <div className="bg-slate-950/40 p-2.5 rounded-lg border border-amber-500/10 space-y-1">
+                    <p className="text-[10px] text-slate-400"><strong>To enable fully automated WhatsApp alerts:</strong></p>
+                    <p className="text-[10px] text-slate-400 leading-normal">Configure <strong>WAHA API</strong>, <strong>Meta Cloud API</strong>, or <strong>Twilio WhatsApp</strong> credentials in your app secrets settings panel.</p>
+                  </div>
+                </div>
+              )}
+
+              {!waApiSuccess && !waApiError && (
+                <div className="bg-slate-950/40 border border-white/5 rounded-xl p-3 text-xs text-slate-400 leading-relaxed">
+                  📢 Choose between <strong>Automated API Dispatch</strong> (requires credentials) or <strong>Manual Redirection</strong> via WhatsApp Web.
+                </div>
+              )}
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Verify School WhatsApp Number</label>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Verify WhatsApp Number</label>
                   <input
                     type="text"
                     value={waModalData.phone}
@@ -2074,11 +2371,11 @@ export default function AdminDashboard() {
                     placeholder="Enter phone with country code, e.g. +94771234567"
                     className="w-full bg-slate-950 border border-white/10 focus:border-green-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-white font-mono"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Make sure to include country code without symbols (e.g. 94 for Sri Lanka).</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Include country code without symbols (e.g. 94 for Sri Lanka).</p>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Preview WhatsApp Message</label>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Preview Message Content</label>
                   <textarea
                     rows={8}
                     value={waModalData.message}
@@ -2088,26 +2385,45 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col gap-2 pt-2">
+                <div className="flex gap-2">
+                  <button
+                    disabled={isSendingWa}
+                    onClick={handleSendWaApi}
+                    className="flex-1 py-3 bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs font-mono uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-green-500/10"
+                  >
+                    {isSendingWa ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Cpu className="w-4 h-4 shrink-0" />
+                        API Dispatch
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const cleanPhone = waModalData.phone.replace(/[^0-9]/g, '');
+                      const encodedMsg = encodeURIComponent(waModalData.message);
+                      window.open(`https://wa.me/${cleanPhone}?text=${encodedMsg}`, '_blank');
+                      setWaModalData(null);
+                    }}
+                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs font-mono uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                    Manual Web
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setWaModalData(null)}
-                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition cursor-pointer"
+                  className="w-full py-2.5 bg-transparent border border-white/5 hover:border-white/10 text-slate-400 hover:text-white rounded-xl text-[10px] font-mono uppercase tracking-wider transition cursor-pointer"
                 >
-                  Skip
-                </button>
-                <button
-                  onClick={() => {
-                    const cleanPhone = waModalData.phone.replace(/[^0-9]/g, '');
-                    const encodedMsg = encodeURIComponent(waModalData.message);
-                    window.open(`https://wa.me/${cleanPhone}?text=${encodedMsg}`, '_blank');
-                    setWaModalData(null);
-                  }}
-                  className="flex-[2] py-3 bg-green-500 hover:bg-green-600 text-slate-950 font-bold rounded-xl text-xs font-mono uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-green-500/10"
-                >
-                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.858.002-2.634-1.019-5.111-2.875-6.968-1.857-1.858-4.331-2.88-6.969-2.881-5.441 0-9.866 4.42-9.87 9.858a9.816 9.816 0 001.472 5.004l-.969 3.537 3.633-.953zM18.23 15.34c-.34-.17-2.01-1-2.316-1.11-.312-.112-.538-.17-.764.17-.225.337-.872 1.1-.1.17.653-.762.653-.87.423-.337-.226-.113-1.638-.602-3.118-1.92-1.15-1.025-1.926-2.29-2.152-2.627-.226-.337-.024-.52.146-.689.153-.153.339-.395.509-.593.17-.198.226-.339.339-.565.113-.226.056-.424-.028-.593-.085-.17-.763-1.838-1.045-2.518-.276-.665-.554-.575-.762-.585-.198-.01-.424-.01-.65-.01-.226 0-.593.085-.904.424-.311.339-1.187 1.159-1.187 2.827s1.215 3.279 1.385 3.505c.17.227 2.39 3.651 5.79 5.121.808.349 1.44.558 1.93.714.811.258 1.55.221 2.13.136.65-.098 2.01-.822 2.29-1.583.284-.763.284-1.414.2-1.55-.084-.136-.311-.225-.65-.395z" />
-                  </svg>
-                  Send via WhatsApp
+                  Dismiss / Skip
                 </button>
               </div>
             </motion.div>

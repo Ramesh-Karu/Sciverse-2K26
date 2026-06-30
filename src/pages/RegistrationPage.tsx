@@ -32,7 +32,11 @@ export default function RegistrationPage() {
     const saved = localStorage.getItem('registrationFormData');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.whatsapp || parsed.whatsapp === "") {
+          parsed.whatsapp = "+94 ";
+        }
+        return parsed;
       } catch (e) {}
     }
     return {
@@ -42,7 +46,7 @@ export default function RegistrationPage() {
       teacherInChargeEmail: '',
       teacherInChargePhone: '',
       contact: '',
-      whatsapp: '',
+      whatsapp: '+94 ',
       email: '',
       address: '',
       logoUrl: 'https://i.ibb.co/hJp9jZb4/1000192206-imgupscaler-ai-General-8-K.jpg',
@@ -58,7 +62,11 @@ export default function RegistrationPage() {
     const saved = localStorage.getItem('studentRegistrationData');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.whatsapp || parsed.whatsapp === "") {
+          parsed.whatsapp = "+94 ";
+        }
+        return parsed;
       } catch (e) {}
     }
     return {
@@ -67,7 +75,7 @@ export default function RegistrationPage() {
       age: 15,
       grade: '',
       contact: '',
-      whatsapp: '',
+      whatsapp: '+94 ',
       email: '',
       address: '',
       parentName: '',
@@ -77,6 +85,53 @@ export default function RegistrationPage() {
       arrivalTime: '08:30 AM - 09:00 AM',
     };
   });
+
+  // WAHA Overrides
+  const wahaUrlOverride = localStorage.getItem("waha_url_override") || "";
+  const wahaKeyOverride = localStorage.getItem("waha_key_override") || "";
+  const wahaSessionOverride = localStorage.getItem("waha_session_override") || "";
+
+  const getWahaHeaders = (baseHeaders: Record<string, string> = {}) => {
+    const headers = { ...baseHeaders };
+    if (wahaUrlOverride) headers["x-waha-url-override"] = wahaUrlOverride;
+    if (wahaKeyOverride) headers["x-waha-key-override"] = wahaKeyOverride;
+    if (wahaSessionOverride) headers["x-waha-session-override"] = wahaSessionOverride;
+    return headers;
+  };
+
+  const handleWhatsAppChange = (rawVal: string): string => {
+    // 1. If it's completely empty or deleted, reset to "+94 "
+    if (rawVal === "" || rawVal === "+" || rawVal === "+9" || rawVal === "+94") {
+      return "+94 ";
+    }
+
+    let val = rawVal;
+    
+    // 2. Ensure it starts with "+94 " or "+94"
+    if (!val.startsWith("+94")) {
+      const digits = val.replace(/\D/g, "");
+      if (digits.startsWith("94")) {
+        val = "+94 " + digits.substring(2);
+      } else {
+        val = "+94 " + digits;
+      }
+    }
+
+    // Ensure there is a space or separator after +94
+    if (val.startsWith("+94") && !val.startsWith("+94 ")) {
+      val = "+94 " + val.substring(3);
+    }
+
+    // 3. Prevent '0' from being typed as the first digit after the country code.
+    const countryPrefix = "+94 ";
+    const rest = val.substring(countryPrefix.length);
+
+    if (rest.startsWith("0")) {
+      val = countryPrefix + rest.substring(1);
+    }
+
+    return val;
+  };
 
   useEffect(() => {
     localStorage.setItem('registrationFormData', JSON.stringify(formData));
@@ -251,6 +306,22 @@ export default function RegistrationPage() {
           });
         } catch (emailErr) {}
 
+        // Send Pending WhatsApp message automatically
+        try {
+          const pendingMsg = `*SciVerse 2K26 Registration Received!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${formData.teacherInCharge}*,\n\nThank you for registering *${formData.name}* for SciVerse 2K26! Your registration has been successfully received and is currently *Pending* review.\n\n*Admission & Portal Details:*\n============================\n🎫 *Temporary ID:* ${regId}\n📅 *Preferred Day:* ${formData.preferredDay}\n👥 *Expected Delegation:* ${formData.expectedStudents} Students & ${formData.expectedTeachers} Teachers\n\nOnce approved, you will receive another WhatsApp confirmation with your final admission details, portal link, and QR Entry Pass.\n\n*Official Updates Group:*\n============================\nJoin our official SciVerse updates channel to stay informed:\nhttps://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l\n\nSee you soon!`;
+
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: getWahaHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              phone: formData.whatsapp || formData.contact || '',
+              message: pendingMsg
+            })
+          });
+        } catch (waErr) {
+          console.error("Automatic WhatsApp pending dispatch failed:", waErr);
+        }
+
         try {
           await addDoc(collection(db, 'notificationLogs'), {
             schoolName: formData.name,
@@ -314,6 +385,22 @@ export default function RegistrationPage() {
           });
         } catch (logErr) {
           console.error("Log error: ", logErr);
+        }
+
+        // Send Pending WhatsApp message automatically
+        try {
+          const pendingMsg = `*SciVerse 2K26 Solo Registration Received!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${studentData.name}*,\n\nThank you for registering for SciVerse 2K26! Your solo registration has been successfully received and is currently *Pending* review.\n\n*Admission & Portal Details:*\n============================\n🎫 *Temporary ID:* ${regId}\n🏫 *School:* ${studentData.school}\n\nOnce approved, you will receive another WhatsApp confirmation with your final admission details, portal link, and QR Entry Pass.\n\n*Official Updates Group:*\n============================\nJoin our official SciVerse updates channel to stay informed:\nhttps://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l\n\nSee you soon!`;
+
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: getWahaHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              phone: studentData.whatsapp || studentData.contact || '',
+              message: pendingMsg
+            })
+          });
+        } catch (waErr) {
+          console.error("Automatic WhatsApp pending dispatch failed:", waErr);
         }
 
         setRegisteredStudent({
@@ -553,7 +640,7 @@ export default function RegistrationPage() {
                                   required
                                   placeholder="e.g. +94 77 123 4567"
                                   value={formData.whatsapp}
-                                  onChange={e => setFormData({...formData, whatsapp: e.target.value})}
+                                  onChange={e => setFormData({...formData, whatsapp: handleWhatsAppChange(e.target.value)})}
                                   className="w-full bg-slate-900/60 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-white"
                                 />
                               </div>
@@ -826,7 +913,7 @@ export default function RegistrationPage() {
                                   required
                                   placeholder="+94 77 xxxxxxx"
                                   value={studentData.whatsapp}
-                                  onChange={e => setStudentData({...studentData, whatsapp: e.target.value})}
+                                  onChange={e => setStudentData({...studentData, whatsapp: handleWhatsAppChange(e.target.value)})}
                                   className="w-full bg-slate-900/60 border border-white/10 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm"
                                 />
                               </div>

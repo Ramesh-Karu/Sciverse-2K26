@@ -159,6 +159,238 @@ app.post("/api/email/confirm", async (req, res) => {
   }
 });
 
+// Helper function to safely fetch and parse JSON responses, preventing SyntaxError on non-JSON or empty content
+async function safeFetchJson(url: string, options: RequestInit) {
+  try {
+    const response = await fetch(url, options);
+    const text = await response.text();
+    let data: any;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (err) {
+      data = { error: text || `Status: ${response.status} ${response.statusText}` };
+    }
+    return { ok: response.ok, status: response.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: { error: error instanceof Error ? error.message : String(error) }
+    };
+  }
+}
+
+// WhatsApp API dispatcher
+app.post("/api/whatsapp/send", async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) {
+      return res.status(400).json({ success: false, error: "Phone and message are required." });
+    }
+
+    const cleanPhone = phone.replace(/[^0-9]/g, "");
+
+    // 1. Meta WhatsApp Cloud API credentials
+    const metaToken = process.env.META_WHATSAPP_ACCESS_TOKEN;
+    const metaPhoneId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+
+    // 2. Twilio WhatsApp credentials
+    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+    const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioFrom = process.env.TWILIO_WHATSAPP_FROM;
+
+    // 3. WAHA (WhatsApp HTTP API) Configuration
+    const wahaApiUrlOverride = req.headers["x-waha-url-override"] as string;
+    const wahaApiKeyOverride = req.headers["x-waha-key-override"] as string;
+    const wahaSessionOverride = req.headers["x-waha-session-override"] as string;
+
+    const wahaApiUrl = wahaApiUrlOverride || process.env.WAHA_API_URL || "https://devlikeaprowaha-production-5bc7.up.railway.app";
+    const wahaApiKey = wahaApiKeyOverride !== undefined ? (wahaApiKeyOverride === "none" ? "" : wahaApiKeyOverride) : process.env.WAHA_API_KEY;
+    const wahaSession = wahaSessionOverride || process.env.WAHA_SESSION || "default";
+
+    // Detect which provider to use
+    const hasMeta = !!(metaToken && metaPhoneId);
+    const hasTwilio = !!(twilioSid && twilioAuthToken && twilioFrom);
+    
+    // Default to WAHA if WAHA_API_URL is specified, or if an override URL is supplied, or if neither Meta nor Twilio are configured
+    const useWaha = !!wahaApiUrlOverride || !!process.env.WAHA_API_URL || (!hasMeta && !hasTwilio);
+
+    if (useWaha) {
+      // Send using WAHA API
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json"
+      };
+      if (wahaApiKey && wahaApiKey !== "none") {
+        headers["X-Api-Key"] = wahaApiKey;
+        headers["Authorization"] = `Bearer ${wahaApiKey}`;
+      }
+
+      // If wahaApiUrl is pointing to localhost:3000, prevent self-referential loop that triggers 404
+      if (wahaApiUrl.includes("localhost:3000") || wahaApiUrl.includes("127.0.0.1:3000")) {
+        throw new Error(
+          "WAHA_API_URL is configured to localhost:3000 (which is the current web application port). " +
+          "Please specify the correct port or external URL where your WAHA container is running."
+        );
+      }
+
+      const { ok, status, data } = await safeFetchJson(`${wahaApiUrl}/api/sendText`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          chatId: `${cleanPhone}@c.us`,
+          text: message,
+          session: wahaSession
+        })
+      });
+
+      if (!ok) {
+        throw new Error(data.message || data.error || `WAHA API responded with status ${status}`);
+      }
+
+      return res.json({ success: true, provider: "waha", data });
+    } else if (hasMeta) {
+      // Send using Meta Cloud API
+      const { ok, status, data } = await safeFetchJson(`https://graph.facebook.com/v19.0/${metaPhoneId}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${metaToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanPhone,
+          type: "text",
+          text: {
+            preview_url: false,
+            body: message
+          }
+        })
+      });
+
+      if (!ok) {
+        throw new Error(data.error?.message || data.message || data.error || `Meta API responded with status ${status}`);
+      }
+
+      return res.json({ success: true, provider: "meta", data });
+    } else if (hasTwilio) {
+      // Send using Twilio API
+      const authHeader = `Basic ${Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64')}`;
+      const params = new URLSearchParams();
+      params.append("To", `whatsapp:+${cleanPhone}`);
+      params.append("From", `whatsapp:${twilioFrom}`);
+      params.append("Body", message);
+
+      const { ok, status, data } = await safeFetchJson(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+        method: "POST",
+        headers: {
+          "Authorization": authHeader,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: params.toString()
+      });
+
+      if (!ok) {
+        throw new Error(data.message || data.error || `Twilio API responded with status ${status}`);
+      }
+
+      return res.json({ success: true, provider: "twilio", data });
+    } else {
+      // Fallback for non-configured states
+      return res.status(412).json({
+        success: false,
+        error: "WhatsApp API credentials are not configured.",
+        instructions: "Please define WAHA credentials, Meta WhatsApp Cloud API credentials, or Twilio credentials in your server environment variables.",
+        wahaEnv: ["WAHA_API_URL", "WAHA_API_KEY", "WAHA_SESSION"],
+        metaEnv: ["META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID"],
+        twilioEnv: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"]
+      });
+    }
+  } catch (error) {
+    console.error("WhatsApp Send Error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to dispatch WhatsApp message via API.",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// WAHA Connection Status check proxy
+app.get("/api/whatsapp/status", async (req, res) => {
+  const wahaApiUrlOverride = req.headers["x-waha-url-override"] as string;
+  const wahaApiKeyOverride = req.headers["x-waha-key-override"] as string;
+  const wahaSessionOverride = req.headers["x-waha-session-override"] as string;
+
+  const wahaApiUrl = wahaApiUrlOverride || process.env.WAHA_API_URL || "https://devlikeaprowaha-production-5bc7.up.railway.app";
+  const wahaApiKey = wahaApiKeyOverride !== undefined ? (wahaApiKeyOverride === "none" ? "" : wahaApiKeyOverride) : process.env.WAHA_API_KEY;
+  const wahaSession = wahaSessionOverride || process.env.WAHA_SESSION || "default";
+
+  console.log(`[WAHA STATUS CHECK] URL: ${wahaApiUrl}, Session: ${wahaSession}`);
+  console.log(`[WAHA STATUS CHECK] API Key Loaded: ${!!wahaApiKey} (Length: ${wahaApiKey ? wahaApiKey.length : 0})`);
+  if (wahaApiKey) {
+    console.log(`[WAHA STATUS CHECK] API Key starts with: "${wahaApiKey.substring(0, 10)}..."`);
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
+    if (wahaApiKey && wahaApiKey !== "none") {
+      headers["X-Api-Key"] = wahaApiKey;
+      headers["Authorization"] = `Bearer ${wahaApiKey}`;
+    }
+
+    if (wahaApiUrl.includes("localhost:3000") || wahaApiUrl.includes("127.0.0.1:3000")) {
+      throw new Error(
+        "WAHA_API_URL is configured to localhost:3000 (which is the current web application port). " +
+        "Please specify the correct port or external URL where your WAHA container is running."
+      );
+    }
+
+    const { ok, status, data } = await safeFetchJson(`${wahaApiUrl}/api/sessions`, {
+      method: "GET",
+      headers
+    });
+
+    if (!ok) {
+      throw new Error(`WAHA returned status ${status}: ${typeof data === 'object' ? JSON.stringify(data) : data}`);
+    }
+
+    const sessions = Array.isArray(data) ? data : [];
+    // Find matching session
+    const currentSession = sessions.find((s: any) => s.name === wahaSession || s.id === wahaSession);
+
+    if (currentSession) {
+      return res.json({
+        success: true,
+        connected: currentSession.status === "WORKING" || currentSession.status === "CONNECTED",
+        status: currentSession.status,
+        session: currentSession,
+        allSessions: sessions,
+        wahaApiUrl
+      });
+    } else {
+      return res.json({
+        success: true,
+        connected: false,
+        status: "NOT_FOUND",
+        error: `Session '${wahaSession}' not found in WAHA.`,
+        allSessions: sessions,
+        wahaApiUrl
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      connected: false,
+      status: "UNREACHABLE",
+      error: error instanceof Error ? error.message : String(error),
+      wahaApiUrl
+    });
+  }
+});
+
 // Export app for serverless deployment (e.g., Vercel)
 export default app;
 
