@@ -19,16 +19,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize Google GenAI client
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+// Initialize Google GenAI client (lazy loaded to prevent crash when deployed without key)
+let aiInstance: GoogleGenAI | null = null;
+function getAi() {
+  if (!aiInstance) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error("GEMINI_API_KEY environment variable is missing.");
     }
+    aiInstance = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiInstance;
+}
 
 // AI endpoints
 app.post("/api/ai/predict", async (req, res) => {
@@ -54,7 +63,7 @@ Please respond with a strictly formatted JSON object containing these exact fiel
 - expectedPeakQueue: string (e.g. "120+ students at Main Gate")
 - mitigationUrgency: string (e.g. "HIGH" or "CRITICAL")`;
 
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: "gemini-3.5-flash",
       contents: prompt,
       config: {
@@ -115,7 +124,7 @@ FAQ:
 Answer the following user question in a professional, welcoming, and futuristic tone. Keep the answer concise (under 120 words):
 User: ${question}`;
 
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: "gemini-3.5-flash",
       contents: prompt,
     });

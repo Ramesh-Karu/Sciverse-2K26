@@ -91,7 +91,16 @@ export default function AdminDashboard() {
         }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        const cleanText = text.replace(/<[^>]*>/g, " ").trim();
+        const truncatedText = cleanText.substring(0, 180) + (cleanText.length > 180 ? "..." : "");
+        throw new Error(truncatedText || `HTTP ${response.status} ${response.statusText}`);
+      }
+
       if (!response.ok) {
         if (response.status === 412) {
           setWaApiError("API NOT CONFIGURED: Please define either WAHA API details, Meta Cloud API keys, or Twilio keys in your environment variables.");
@@ -127,7 +136,15 @@ export default function AdminDashboard() {
       const response = await fetch("/api/whatsapp/status", {
         headers: getWahaHeaders()
       });
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        const cleanText = text.replace(/<[^>]*>/g, " ").trim();
+        const truncatedText = cleanText.substring(0, 180) + (cleanText.length > 180 ? "..." : "");
+        throw new Error(truncatedText || `HTTP ${response.status} ${response.statusText}`);
+      }
       setWahaStatusData(data);
     } catch (err) {
       console.error(err);
@@ -417,7 +434,16 @@ export default function AdminDashboard() {
           arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        const cleanText = text.replace(/<[^>]*>/g, " ").trim();
+        const truncatedText = cleanText.substring(0, 180) + (cleanText.length > 180 ? "..." : "");
+        throw new Error(truncatedText || `HTTP ${res.status} ${res.statusText}`);
+      }
+
       if (data.success) {
         if (data.method === 'simulation') {
           success(`[Simulation Mode] Confirmation email logged successfully in Server Console! (No RESEND_API_KEY configured in Secrets panel)`);
@@ -535,11 +561,16 @@ export default function AdminDashboard() {
         body: JSON.stringify({ schools, arrivalSlots })
       });
 
-      if (!response.ok) {
-        throw new Error('AI analysis failed');
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        const cleanText = text.replace(/<[^>]*>/g, " ").trim();
+        const truncatedText = cleanText.substring(0, 180) + (cleanText.length > 180 ? "..." : "");
+        throw new Error(truncatedText || `HTTP ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
       setAiReport(data);
       success('Gemini AI Congestion Analysis completed!');
     } catch (err) {
@@ -767,7 +798,16 @@ export default function AdminDashboard() {
           isSolo: true
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        const cleanText = text.replace(/<[^>]*>/g, " ").trim();
+        const truncatedText = cleanText.substring(0, 180) + (cleanText.length > 180 ? "..." : "");
+        throw new Error(truncatedText || `HTTP ${res.status} ${res.statusText}`);
+      }
+
       if (data.success) {
         success(`Confirmation email sent successfully to ${student.email}!`);
       } else {
