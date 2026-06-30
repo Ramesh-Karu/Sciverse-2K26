@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar, Clock, Award, ShieldAlert, CheckCircle, 
   ChevronRight, Users, School, ArrowRight, Sparkles, BookOpen, 
-  MapPin, Phone, Mail, HelpCircle, Database, AlertTriangle
+  MapPin, Phone, Mail, HelpCircle, Database, AlertTriangle, Youtube
 } from 'lucide-react';
 
 export default function LandingPage() {
@@ -557,6 +557,36 @@ export default function LandingPage() {
               {capacityUsed}%<span className="text-xs text-slate-500"> allocated</span>
             </h3>
             <p className="text-[10px] text-slate-400 mt-1 uppercase font-mono">All days aggregated</p>
+          </div>
+        </motion.div>
+
+        {/* RECAP VIDEO SECTION */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6 }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md space-y-4"
+        >
+          <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/20 shrink-0">
+              <Youtube className="w-5 h-5 text-red-500 animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                Recap : Sciverse 2K25
+              </h2>
+              <p className="text-xs text-slate-400">Relive the highlights and pure scientific brilliance from our previous year's event</p>
+            </div>
+          </div>
+          <div className="aspect-video w-full rounded-xl overflow-hidden border border-white/10 bg-slate-950 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+            <iframe
+              src="https://www.youtube.com/embed/0HfsSQlgY_Q?autoplay=1&mute=1&loop=1&playlist=0HfsSQlgY_Q&controls=0"
+              title="Recap : Sciverse 2K25"
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            ></iframe>
           </div>
         </motion.div>
 
