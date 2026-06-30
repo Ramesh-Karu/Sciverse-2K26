@@ -801,7 +801,7 @@ export default function LandingPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-blue-400 shrink-0" />
-                  <span>+94 77 311 2306</span>
+                  <span>+94 77 420 1942</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-blue-400 shrink-0" />
