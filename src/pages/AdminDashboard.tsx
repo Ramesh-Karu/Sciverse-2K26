@@ -326,7 +326,6 @@ export default function AdminDashboard() {
             name: school.name,
             email: school.email,
             teacherInCharge: school.teacherInCharge,
-            teacherInChargeEmail: school.teacherInChargeEmail,
             registrationId: regId,
             qrCodeUrl: qrPassUrl,
             quota: school.quota && school.quota < 9999 ? school.quota : ((school.expectedStudents || 0) + (school.expectedTeachers || 0) || 30),
@@ -341,7 +340,7 @@ export default function AdminDashboard() {
         console.error("Failed to automatically dispatch confirmation email:", emailErr);
       }
 
-      // Automatically dispatch WhatsApp confirmation message (School)
+      // Automatically dispatch WhatsApp confirmation message
       try {
         await fetch('/api/whatsapp/send', {
           method: 'POST',
@@ -352,21 +351,7 @@ export default function AdminDashboard() {
           })
         });
       } catch (waErr) {
-        console.error("Failed to automatically dispatch confirmation WhatsApp to school:", waErr);
-      }
-
-      // Automatically dispatch WhatsApp confirmation message (Teacher)
-      try {
-        await fetch('/api/whatsapp/send', {
-          method: 'POST',
-          headers: getWahaHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({
-            phone: school.teacherInChargeWhatsapp || school.teacherInChargePhone || '',
-            message: getWhatsAppMessage(school, regId)
-          })
-        });
-      } catch (waErr) {
-        console.error("Failed to automatically dispatch confirmation WhatsApp to teacher:", waErr);
+        console.error("Failed to automatically dispatch confirmation WhatsApp:", waErr);
       }
 
       success(`Approved: ${school.name}. Assigned Reg ID: ${regId}`);
@@ -455,7 +440,6 @@ export default function AdminDashboard() {
           name: school.name,
           email: school.email,
           teacherInCharge: school.teacherInCharge,
-          teacherInChargeEmail: school.teacherInChargeEmail,
           registrationId: regId,
           qrCodeUrl: qrPassUrl,
           quota: school.quota && school.quota < 9999 ? school.quota : ((school.expectedStudents || 0) + (school.expectedTeachers || 0) || 30),
@@ -1385,7 +1369,7 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="text-xs space-y-1 text-slate-300 bg-slate-950/40 p-2.5 rounded-xl">
-                          <p><span className="text-slate-500">Teacher:</span> {s.teacherInCharge} {s.teacherInChargePhone ? `(Ph: ${s.teacherInChargePhone})` : ''} {s.teacherInChargeWhatsapp ? `(WA: ${s.teacherInChargeWhatsapp})` : ''}</p>
+                          <p><span className="text-slate-500">Teacher:</span> {s.teacherInCharge} ({s.contact})</p>
                           <p><span className="text-slate-500">Principal:</span> {s.principalName}</p>
                           {s.specialRequirements && (
                             <p className="text-[11px] text-amber-400 font-mono"><span className="text-slate-500">Special Requirements:</span> {s.specialRequirements}</p>
@@ -1678,7 +1662,6 @@ export default function AdminDashboard() {
                             teacherInCharge: s.teacherInCharge,
                             teacherInChargeEmail: s.teacherInChargeEmail,
                             teacherInChargePhone: s.teacherInChargePhone,
-                            teacherInChargeWhatsapp: s.teacherInChargeWhatsapp,
                             principalName: s.principalName,
                             email: s.email,
                             contact: s.contact,

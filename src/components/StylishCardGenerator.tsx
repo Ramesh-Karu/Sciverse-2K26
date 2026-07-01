@@ -9,7 +9,6 @@ export interface CardSchoolData {
   teacherInCharge?: string;
   teacherInChargeEmail?: string;
   teacherInChargePhone?: string;
-  teacherInChargeWhatsapp?: string;
   principalName?: string;
   email: string;
   contact: string;
@@ -378,10 +377,7 @@ export const SchoolPassCard: React.FC<SchoolPassCardProps> = ({ school, classNam
                 <p className="text-[8px] text-slate-500 font-mono uppercase">COORDINATOR</p>
                 <p className="text-slate-200 truncate font-medium">{school.teacherInCharge}</p>
                 {school.teacherInChargePhone && (
-                  <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5" title="Teacher Phone">Ph: {school.teacherInChargePhone}</p>
-                )}
-                {school.teacherInChargeWhatsapp && (
-                  <p className="text-[9px] text-slate-400 font-mono truncate text-green-400 mt-0.5" title="Teacher WhatsApp">WA: {school.teacherInChargeWhatsapp}</p>
+                  <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5" title="Teacher Phone">{school.teacherInChargePhone}</p>
                 )}
               </div>
               <div>
