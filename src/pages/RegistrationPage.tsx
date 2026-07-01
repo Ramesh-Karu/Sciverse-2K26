@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import Navbar from '../components/Navbar';
 import RobotAssistant from '../components/RobotAssistant';
@@ -297,6 +297,17 @@ export default function RegistrationPage() {
 
         // Email and Logs...
         try {
+          let smtpConfig = null;
+          try {
+            const emailConfigRef = doc(db, 'configs', 'email');
+            const configSnap = await getDoc(emailConfigRef);
+            if (configSnap.exists()) {
+              smtpConfig = configSnap.data();
+            }
+          } catch (configErr) {
+            console.error("Error fetching SMTP config for registration email: ", configErr);
+          }
+
           await fetch('/api/email/pending', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -307,6 +318,7 @@ export default function RegistrationPage() {
               registrationId: regId,
               expectedStudents: Number(formData.expectedStudents),
               expectedTeachers: Number(formData.expectedTeachers),
+              smtpConfig,
             })
           });
         } catch (emailErr) {}
@@ -390,6 +402,36 @@ export default function RegistrationPage() {
           });
         } catch (logErr) {
           console.error("Log error: ", logErr);
+        }
+
+        // Email dispatch for solo student registration
+        try {
+          let smtpConfig = null;
+          try {
+            const emailConfigRef = doc(db, 'configs', 'email');
+            const configSnap = await getDoc(emailConfigRef);
+            if (configSnap.exists()) {
+              smtpConfig = configSnap.data();
+            }
+          } catch (configErr) {
+            console.error("Error fetching SMTP config for solo registration email: ", configErr);
+          }
+
+          await fetch('/api/email/pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: studentData.name,
+              email: studentData.email,
+              teacherInCharge: studentData.parentName || studentData.name,
+              registrationId: regId,
+              expectedStudents: 1,
+              expectedTeachers: 0,
+              smtpConfig,
+            })
+          });
+        } catch (emailErr) {
+          console.error("Error sending pending email to solo student:", emailErr);
         }
 
         // Send Pending WhatsApp message automatically

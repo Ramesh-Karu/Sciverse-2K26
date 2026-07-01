@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
-import { sendPendingEmail, sendConfirmationEmail } from "./server/mailer";
+import { sendPendingEmail, sendConfirmationEmail, sendTestEmail } from "./server/mailer";
 
 const app = express();
 const PORT = 3000;
@@ -162,6 +162,20 @@ app.post("/api/email/confirm", async (req, res) => {
     console.error("Confirmation email API error:", err);
     res.status(500).json({ 
       error: "Failed to send confirmation email", 
+      details: err instanceof Error ? err.message : String(err) 
+    });
+  }
+});
+
+app.post("/api/email/test", async (req, res) => {
+  try {
+    const { to, subject, body, smtpConfig } = req.body;
+    const result = await sendTestEmail(to, subject, body, smtpConfig);
+    res.json(result);
+  } catch (err) {
+    console.error("Test email API error:", err);
+    res.status(500).json({ 
+      error: "Failed to send test email", 
       details: err instanceof Error ? err.message : String(err) 
     });
   }

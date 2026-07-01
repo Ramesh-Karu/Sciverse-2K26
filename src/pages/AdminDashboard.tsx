@@ -57,6 +57,24 @@ export default function AdminDashboard() {
   const [wahaSessionOverride, setWahaSessionOverride] = useState(() => localStorage.getItem("waha_session_override") || "");
   const [showWahaSettings, setShowWahaSettings] = useState(false);
 
+  // SMTP Settings State
+  const [smtpConfig, setSmtpConfig] = useState<any>({
+    host: '',
+    port: '587',
+    secure: false,
+    user: '',
+    pass: '',
+    resendApiKey: '',
+    senderEmail: 'noreply@npfp.site',
+    senderName: 'SciVerse 2K26'
+  });
+  const [showSmtpSettings, setShowSmtpSettings] = useState(false);
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
+  const [testEmailRecipient, setTestEmailRecipient] = useState('');
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [testEmailError, setTestEmailError] = useState<string | null>(null);
+  const [testEmailSuccess, setTestEmailSuccess] = useState<string | null>(null);
+
   const getWahaHeaders = (baseHeaders: Record<string, string> = {}) => {
     const headers = { ...baseHeaders };
     if (wahaUrlOverride) headers["x-waha-url-override"] = wahaUrlOverride;
@@ -313,6 +331,7 @@ export default function AdminDashboard() {
             quota: 999999, // Unlimited allotment
             preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
             arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
+            smtpConfig,
           }),
         });
       } catch (emailErr) {
@@ -424,6 +443,7 @@ export default function AdminDashboard() {
           quota: 999999, // Unlimited allotment
           preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
           arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
+          smtpConfig,
         }),
       });
       const text = await res.text();
@@ -483,7 +503,31 @@ export default function AdminDashboard() {
         console.error("Error fetching config: ", err);
       }
     };
+
+    const fetchSmtpConfig = async () => {
+      try {
+        const emailConfigRef = doc(db, 'configs', 'email');
+        const configSnap = await getDoc(emailConfigRef);
+        if (configSnap.exists()) {
+          const data = configSnap.data();
+          setSmtpConfig({
+            host: data.host || '',
+            port: data.port || '587',
+            secure: data.secure || false,
+            user: data.user || '',
+            pass: data.pass || '',
+            resendApiKey: data.resendApiKey || '',
+            senderEmail: data.senderEmail || 'noreply@npfp.site',
+            senderName: data.senderName || 'SciVerse 2K26'
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching SMTP config on mount: ", err);
+      }
+    };
+
     fetchConfig();
+    fetchSmtpConfig();
   }, []);
 
   // Handle max schools limit change
@@ -506,6 +550,74 @@ export default function AdminDashboard() {
       toastError(`Failed to save limit: ${err.message || 'Unknown error'}`);
     } finally {
       setIsSavingLimit(false);
+    }
+  };
+
+  // Handle SMTP Settings Save
+  const handleSaveSmtpSettings = async () => {
+    if (!isAdmin) {
+      toastError("You do not have permission to change these settings.");
+      return;
+    }
+    setIsSavingSmtp(true);
+    try {
+      const emailConfigRef = doc(db, 'configs', 'email');
+      await setDoc(emailConfigRef, { 
+        ...smtpConfig,
+        updatedBy: user?.email,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      success('SMTP Connection Settings updated and saved in Firestore!');
+    } catch (err: any) {
+      console.error("Error saving SMTP settings: ", err);
+      toastError(err.message || "Failed to save SMTP settings.");
+    } finally {
+      setIsSavingSmtp(false);
+    }
+  };
+
+  // Handle Send Test Email
+  const handleSendTestEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!testEmailRecipient.trim()) {
+      toastError("Please enter a valid recipient email.");
+      return;
+    }
+    setIsSendingTestEmail(true);
+    setTestEmailError(null);
+    setTestEmailSuccess(null);
+    try {
+      const response = await fetch('/api/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: testEmailRecipient.trim(),
+          subject: 'SciVerse 2K26 - SMTP Configuration Test Successful!',
+          body: `SMTP connection validation check performed on ${new Date().toLocaleString()}.`,
+          smtpConfig: smtpConfig
+        })
+      });
+
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(text || `HTTP ${response.status} ${response.statusText}`);
+      }
+
+      if (!response.ok || data.success === false) {
+        throw new Error(data.error || data.details || "SMTP server failed to dispatch test email.");
+      }
+
+      setTestEmailSuccess(`Test email dispatched successfully! Provider strategy: ${data.method.toUpperCase()}. Check your inbox.`);
+      success("Test email sent successfully! Check inbox.");
+    } catch (err: any) {
+      console.error("SMTP Test Dispatch Error:", err);
+      setTestEmailError(err.message || String(err));
+      toastError("SMTP test failed. Please verify credentials.");
+    } finally {
+      setIsSendingTestEmail(false);
     }
   };
 
@@ -676,6 +788,30 @@ export default function AdminDashboard() {
         handleFirestoreError(logErr, OperationType.CREATE, 'notificationLogs');
       }
 
+      // Automatically dispatch confirmation email using SMTP config
+      const qrPassUrl = `https://quickchart.io/chart?cht=qr&chl=${regId}&chs=150x150`;
+      try {
+        await fetch('/api/email/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: student.id,
+            name: student.name,
+            email: student.email,
+            teacherInCharge: student.parentName,
+            registrationId: regId,
+            qrCodeUrl: qrPassUrl,
+            quota: 1,
+            preferredDay: student.preferredDay || 'SciVerse Event Track',
+            arrivalTime: student.arrivalTime || 'To Be Scheduled',
+            isSolo: true,
+            smtpConfig,
+          }),
+        });
+      } catch (emailErr) {
+        console.error("Failed to automatically dispatch solo confirmation email:", emailErr);
+      }
+
       // Automatically dispatch WhatsApp confirmation message
       try {
         await fetch('/api/whatsapp/send', {
@@ -784,7 +920,8 @@ export default function AdminDashboard() {
           quota: 1,
           preferredDay: student.preferredDay || 'SciVerse Event Track',
           arrivalTime: student.arrivalTime || 'To Be Scheduled',
-          isSolo: true
+          isSolo: true,
+          smtpConfig,
         }),
       });
       const text = await res.text();
@@ -2137,6 +2274,225 @@ export default function AdminDashboard() {
                         }}
                         className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-green-500 font-mono"
                       />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SMTP / EMAIL CONFIGURATION PANEL */}
+              <div className="border border-white/5 rounded-2xl bg-slate-950/40 p-5 space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setShowSmtpSettings(!showSmtpSettings)}
+                  className="w-full flex items-center justify-between text-left cursor-pointer"
+                >
+                  <div>
+                    <h4 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-sky-400" /> Automated Email / SMTP Settings
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Configure your NodeMailer SMTP Server or Resend API key for automatic email delivery.
+                    </p>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${showSmtpSettings ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showSmtpSettings && (
+                  <div className="pt-4 border-t border-white/5 space-y-6 animate-slideDown">
+                    {/* Mode Toggle Info */}
+                    <div className="bg-slate-900/60 p-4 rounded-xl border border-white/5 text-xs text-slate-300 space-y-3">
+                      <p className="font-semibold text-white flex items-center gap-1.5 font-mono uppercase text-[10px] tracking-wider text-sky-400">
+                        <Sparkles className="w-3.5 h-3.5" /> Configuration Instructions & Deliverability Guide
+                      </p>
+                      <p>You can choose to configure either standard <strong>SMTP</strong> (Gmail, Mailgun, custom SMTP) OR a <strong>Resend API Key</strong>. If both are left blank, emails fall back to the server environment variables or console-simulation mode.</p>
+                      <div className="border-t border-white/5 pt-2.5 space-y-1.5">
+                        <p className="font-semibold text-[10px] uppercase font-mono tracking-wider text-amber-400">🛡️ How to prevent emails from going to the SPAM folder:</p>
+                        <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-300 leading-relaxed">
+                          <li><strong>Match Sender Email:</strong> Ensure your <em>Sender Email Address</em> (below) is identical to or authorized by your SMTP Username. For example, if authenticating with <code>school@gmail.com</code>, do NOT send as <code>noreply@npfp.site</code>. This triggers strict DMARC/SPF anti-spoofing filters.</li>
+                          <li><strong>App Passwords:</strong> If using Gmail, you must generate and use a 16-character <em>App Password</em> from your Google Account settings, rather than your actual account password.</li>
+                          <li><strong>Option B (Resend API):</strong> This is highly recommended for professional deliverability. Make sure you add and verify your custom sending domain in your Resend Dashboard, which automatically signs emails with SPF and DKIM.</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Sender Identity Details */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Sender Name</label>
+                        <input
+                          type="text"
+                          placeholder="SciVerse 2K26"
+                          value={smtpConfig.senderName}
+                          onChange={(e) => setSmtpConfig({ ...smtpConfig, senderName: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Sender Email Address</label>
+                        <input
+                          type="email"
+                          placeholder="noreply@npfp.site"
+                          value={smtpConfig.senderEmail}
+                          onChange={(e) => setSmtpConfig({ ...smtpConfig, senderEmail: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6 pt-2">
+                      {/* Left: SMTP Configuration */}
+                      <div className="space-y-4 border-r md:border-white/5 pr-0 md:pr-6">
+                        <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-300 border-b border-white/5 pb-2">Option A: SMTP Host Server</h5>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-2 space-y-1.5">
+                            <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Host URL</label>
+                            <input
+                              type="text"
+                              placeholder="smtp.gmail.com"
+                              value={smtpConfig.host}
+                              onChange={(e) => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Port</label>
+                            <input
+                              type="text"
+                              placeholder="587"
+                              value={smtpConfig.port}
+                              onChange={(e) => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Username / User</label>
+                            <input
+                              type="text"
+                              placeholder="your-email@gmail.com"
+                              value={smtpConfig.user}
+                              onChange={(e) => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Password / App Key</label>
+                            <input
+                              type="password"
+                              placeholder="••••••••••••••••"
+                              value={smtpConfig.pass}
+                              onChange={(e) => setSmtpConfig({ ...smtpConfig, pass: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="checkbox"
+                            id="smtp-secure"
+                            checked={smtpConfig.secure}
+                            onChange={(e) => setSmtpConfig({ ...smtpConfig, secure: e.target.checked })}
+                            className="rounded border-white/10 bg-slate-950 text-sky-500 focus:ring-sky-500 cursor-pointer"
+                          />
+                          <label htmlFor="smtp-secure" className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider cursor-pointer">
+                            Use SSL (Secure port 465)
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Right: Resend Configuration */}
+                      <div className="space-y-4">
+                        <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-300 border-b border-white/5 pb-2">Option B: Resend API Key</h5>
+                        
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">Resend API Key</label>
+                          <input
+                            type="password"
+                            placeholder="re_••••••••••••••••••••••••"
+                            value={smtpConfig.resendApiKey}
+                            onChange={(e) => setSmtpConfig({ ...smtpConfig, resendApiKey: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                          />
+                          <p className="text-[10px] text-slate-400 leading-normal">
+                            Using Resend is highly recommended. It handles deliverability, domain alignment, and bypasses local firewall blocks automatically.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 border-t border-white/5 pt-4">
+                      <button
+                        type="button"
+                        disabled={isSavingSmtp}
+                        onClick={handleSaveSmtpSettings}
+                        className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-500/50 text-slate-950 text-xs font-bold font-mono uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-sky-500/10"
+                      >
+                        {isSavingSmtp ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Saving Settings...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Save Email Settings
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Test SMTP connection outbox */}
+                    <div className="border-t border-white/5 pt-4 space-y-3">
+                      <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-300">Test Configuration Connection</h5>
+                      
+                      <form onSubmit={handleSendTestEmail} className="flex gap-3 items-end max-w-lg">
+                        <div className="flex-1 space-y-1.5">
+                          <label className="text-[9px] font-bold font-mono text-slate-400 uppercase tracking-wider">Recipient Email Address</label>
+                          <input
+                            type="email"
+                            placeholder="recipient@example.com"
+                            value={testEmailRecipient}
+                            onChange={(e) => setTestEmailRecipient(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isSendingTestEmail}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800/50 border border-white/10 text-white text-xs font-bold font-mono uppercase tracking-wider rounded-xl transition flex items-center gap-2 cursor-pointer"
+                        >
+                          {isSendingTestEmail ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Testing...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-3.5 h-3.5" />
+                              Send Test Email
+                            </>
+                          )}
+                        </button>
+                      </form>
+
+                      {testEmailSuccess && (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl font-mono animate-fadeIn">
+                          ✅ {testEmailSuccess}
+                        </div>
+                      )}
+
+                      {testEmailError && (
+                        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl font-mono animate-fadeIn leading-relaxed">
+                          ❌ <strong>SMTP Test Failed:</strong> {testEmailError}
+                          <div className="mt-1 text-[10px] text-slate-400">
+                            Tips: Double-check port number (587 TLS vs 465 SSL), ensure your provider allows login (e.g. Google App Passwords), or check if firewalls block SMTP connections.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

@@ -185,27 +185,52 @@ export default function LandingPage() {
           let collectionName = isSoloParam ? 'soloStudents' : 'schools';
           let docRef = doc(db, collectionName, directLoginId);
           let docSnap = await getDoc(docRef);
+          let finalDoc = null;
 
-          // If not found and it was supposed to be a school, try solo (and vice versa)
-          if (!docSnap.exists()) {
+          if (docSnap.exists()) {
+            finalDoc = docSnap;
+          } else {
+            // If not found and it was supposed to be a school, try solo (and vice versa)
             const fallbackCollection = isSoloParam ? 'schools' : 'soloStudents';
             docRef = doc(db, fallbackCollection, directLoginId);
             docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
+              finalDoc = docSnap;
               collectionName = fallbackCollection;
             }
           }
 
-          if (docSnap.exists()) {
-            const data = docSnap.data();
+          // If still not found by direct document ID, check if directLoginId is actually a Registration ID (case-insensitive)
+          if (!finalDoc) {
+            const directUpper = directLoginId.toUpperCase();
+            
+            // Query schools collection by registrationId
+            const qSchoolReg = query(collection(db, 'schools'), where('registrationId', '==', directUpper));
+            const snapSchoolReg = await getDocs(qSchoolReg);
+            if (!snapSchoolReg.empty) {
+              finalDoc = snapSchoolReg.docs[0];
+              collectionName = 'schools';
+            } else {
+              // Query soloStudents collection by registrationId
+              const qSoloReg = query(collection(db, 'soloStudents'), where('registrationId', '==', directUpper));
+              const snapSoloReg = await getDocs(qSoloReg);
+              if (!snapSoloReg.empty) {
+                finalDoc = snapSoloReg.docs[0];
+                collectionName = 'soloStudents';
+              }
+            }
+          }
+
+          if (finalDoc) {
+            const data = finalDoc.data();
             if (data.status === 'rejected') {
               setCoordinatorError('This registration has been declined. Please contact support.');
               setIsLoggingIn(false);
             } else {
               const isActuallySolo = collectionName === 'soloStudents';
-              localStorage.setItem('schoolSessionId', docSnap.id);
+              localStorage.setItem('schoolSessionId', finalDoc.id);
               localStorage.setItem('isSoloSession', isActuallySolo ? 'true' : 'false');
-              localStorage.setItem('schoolRegId', data.registrationId || docSnap.id);
+              localStorage.setItem('schoolRegId', data.registrationId || finalDoc.id);
               
               // Success! Clear the query params and navigate
               navigate('/dashboard', { replace: true });
@@ -262,7 +287,7 @@ export default function LandingPage() {
 
     const inputVal = regIdInput.trim();
     if (!inputVal) {
-      setCoordinatorError('Please enter your School ID, School Email, or Teacher Email.');
+      setCoordinatorError('Please enter your School/Student ID or registered email.');
       setIsLoggingIn(false);
       return;
     }
@@ -273,19 +298,34 @@ export default function LandingPage() {
 
       // Check multiple matching strategies
       const qRegId = query(collection(db, 'schools'), where('registrationId', '==', inputUpper));
-      const qEmail = query(collection(db, 'schools'), where('email', '==', inputLower));
-      const qTeacherEmail = query(collection(db, 'schools'), where('teacherInChargeEmail', '==', inputLower));
+      const qEmailLower = query(collection(db, 'schools'), where('email', '==', inputLower));
+      const qEmailRaw = query(collection(db, 'schools'), where('email', '==', inputVal));
+      const qTeacherEmailLower = query(collection(db, 'schools'), where('teacherInChargeEmail', '==', inputLower));
+      const qTeacherEmailRaw = query(collection(db, 'schools'), where('teacherInChargeEmail', '==', inputVal));
       
       // Check Solo Students too
       const qSoloRegId = query(collection(db, 'soloStudents'), where('registrationId', '==', inputUpper));
-      const qSoloEmail = query(collection(db, 'soloStudents'), where('email', '==', inputLower));
+      const qSoloEmailLower = query(collection(db, 'soloStudents'), where('email', '==', inputLower));
+      const qSoloEmailRaw = query(collection(db, 'soloStudents'), where('email', '==', inputVal));
 
-      const [snapRegId, snapEmail, snapTeacherEmail, snapSoloRegId, snapSoloEmail] = await Promise.all([
+      const [
+        snapRegId, 
+        snapEmailLower, 
+        snapEmailRaw, 
+        snapTeacherEmailLower, 
+        snapTeacherEmailRaw, 
+        snapSoloRegId, 
+        snapSoloEmailLower,
+        snapSoloEmailRaw
+      ] = await Promise.all([
         getDocs(qRegId),
-        getDocs(qEmail),
-        getDocs(qTeacherEmail),
+        getDocs(qEmailLower),
+        getDocs(qEmailRaw),
+        getDocs(qTeacherEmailLower),
+        getDocs(qTeacherEmailRaw),
         getDocs(qSoloRegId),
-        getDocs(qSoloEmail)
+        getDocs(qSoloEmailLower),
+        getDocs(qSoloEmailRaw)
       ]);
 
       let schoolDoc = null;
@@ -293,15 +333,22 @@ export default function LandingPage() {
 
       if (!snapRegId.empty) {
         schoolDoc = snapRegId.docs[0];
-      } else if (!snapEmail.empty) {
-        schoolDoc = snapEmail.docs[0];
-      } else if (!snapTeacherEmail.empty) {
-        schoolDoc = snapTeacherEmail.docs[0];
+      } else if (!snapEmailLower.empty) {
+        schoolDoc = snapEmailLower.docs[0];
+      } else if (!snapEmailRaw.empty) {
+        schoolDoc = snapEmailRaw.docs[0];
+      } else if (!snapTeacherEmailLower.empty) {
+        schoolDoc = snapTeacherEmailLower.docs[0];
+      } else if (!snapTeacherEmailRaw.empty) {
+        schoolDoc = snapTeacherEmailRaw.docs[0];
       } else if (!snapSoloRegId.empty) {
         schoolDoc = snapSoloRegId.docs[0];
         isSolo = true;
-      } else if (!snapSoloEmail.empty) {
-        schoolDoc = snapSoloEmail.docs[0];
+      } else if (!snapSoloEmailLower.empty) {
+        schoolDoc = snapSoloEmailLower.docs[0];
+        isSolo = true;
+      } else if (!snapSoloEmailRaw.empty) {
+        schoolDoc = snapSoloEmailRaw.docs[0];
         isSolo = true;
       } else {
         // Final fallback: check if input is a direct Document ID
@@ -454,12 +501,12 @@ export default function LandingPage() {
               <form onSubmit={handleSchoolLogin} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1.5 font-mono">
-                    SCHOOL ID OR REGISTERED EMAIL
+                    SCHOOL/STUDENT ID OR REGISTERED EMAIL
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Enter School ID, School Email, or Teacher Email"
+                    placeholder="Enter Registration ID (e.g., SV26-S-XXXX) or registered email"
                     value={regIdInput}
                     onChange={e => setRegIdInput(e.target.value)}
                     className="w-full bg-slate-900/60 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 font-mono"

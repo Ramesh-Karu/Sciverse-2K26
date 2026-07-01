@@ -4,18 +4,51 @@ import nodemailer from 'nodemailer';
 let resendInstance: any = null;
 let smtpTransporter: any = null;
 
+// Helper to strip HTML and build plain text alternative for anti-spam filters
+function htmlToText(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<style([\s\S]*?)<\/style>/gi, '')
+    .replace(/<script([\s\S]*?)<\/script>/gi, '')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const getSenderEmail = () => process.env.SENDER_EMAIL || 'noreply@npfp.site';
 const getSenderName = () => process.env.SENDER_NAME || 'SciVerse 2K26';
 
-function getEmailClient() {
-  if (process.env.RESEND_API_KEY) {
+function getEmailClient(smtpConfig?: any) {
+  if (smtpConfig?.resendApiKey) {
+    return { type: 'resend', client: new Resend(smtpConfig.resendApiKey) };
+  } else if (process.env.RESEND_API_KEY) {
     if (!resendInstance) {
       resendInstance = new Resend(process.env.RESEND_API_KEY);
     }
     return { type: 'resend', client: resendInstance };
   }
   
-  if (process.env.SMTP_HOST) {
+  if (smtpConfig?.host) {
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: parseInt(smtpConfig.port || '587'),
+      secure: smtpConfig.secure === true || smtpConfig.secure === 'true',
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+      },
+    });
+    return { type: 'smtp', client: transporter };
+  } else if (process.env.SMTP_HOST) {
     if (!smtpTransporter) {
       smtpTransporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
@@ -237,7 +270,7 @@ function wrapHtmlEmail(title: string, bodyContent: string, accentColor = '#3b82f
 
 // 1. Sends pending registration email
 export async function sendPendingEmail(schoolData: any) {
-  const { name, email, teacherInCharge, registrationId, expectedStudents, expectedTeachers } = schoolData;
+  const { name, email, teacherInCharge, registrationId, expectedStudents, expectedTeachers, smtpConfig } = schoolData;
   const subject = `SciVerse 2K26 - Registration Received [${registrationId}]`;
   
   const content = `
@@ -280,12 +313,12 @@ export async function sendPendingEmail(schoolData: any) {
   `;
 
   const html = wrapHtmlEmail(subject, content, '#3b82f6');
-  return await dispatchEmail(email, subject, html);
+  return await dispatchEmail(email, subject, html, smtpConfig);
 }
 
 // 2. Sends approved/confirmation email
 export async function sendConfirmationEmail(schoolData: any) {
-  const { id, name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo } = schoolData;
+  const { id, name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo, smtpConfig } = schoolData;
   const subject = `SciVerse 2K26 - ${isSolo ? 'Solo Registration' : 'Registration'} CONFIRMED! [${registrationId}]`;
   
   const content = `
@@ -354,25 +387,49 @@ export async function sendConfirmationEmail(schoolData: any) {
   `;
 
   const html = wrapHtmlEmail(subject, content, '#10b981');
-  return await dispatchEmail(email, subject, html);
+  return await dispatchEmail(email, subject, html, smtpConfig);
+}
+
+// 3. Sends test email to verify SMTP or Resend
+export async function sendTestEmail(to: string, subject: string, body: string, smtpConfig?: any) {
+  const content = `
+    <div class="badge">SMTP TEST EMAIL</div>
+    <h1>SMTP Connection Test</h1>
+    <p>This is a test email sent from the SciVerse 2K26 system to verify your SMTP configuration.</p>
+    <div class="divider"></div>
+    <p><strong>Test Message:</strong></p>
+    <p style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: #f1f5f9; border: 1px solid rgba(255,255,255,0.08);">${body}</p>
+    <div class="divider"></div>
+    <p>If you received this, your SMTP settings are correct and working perfectly!</p>
+  `;
+  const html = wrapHtmlEmail(subject, content, '#3b82f6');
+  return await dispatchEmail(to, subject, html, smtpConfig);
 }
 
 // Dispatches email using configured strategy (Resend -> SMTP -> Server Console Log)
-async function dispatchEmail(to: string, subject: string, html: string) {
-  const senderEmail = getSenderEmail();
-  const senderName = getSenderName();
-  const mailer = getEmailClient();
+async function dispatchEmail(to: string, subject: string, html: string, smtpConfig?: any) {
+  const senderEmail = smtpConfig?.senderEmail || getSenderEmail();
+  const senderName = smtpConfig?.senderName || getSenderName();
+  const mailer = getEmailClient(smtpConfig);
   
   console.log(`[Email System] Preparing to send email. Destination: ${to} | Subject: "${subject}" | Client Strategy: ${mailer.type}`);
 
   try {
+    const plainText = htmlToText(html);
+
     if (mailer.type === 'resend') {
       try {
         const response = await mailer.client.emails.send({
           from: `${senderName} <${senderEmail}>`,
           to,
           subject,
+          text: plainText,
           html,
+          headers: {
+            'X-Auto-Response-Loop': 'auto-generated',
+            'Precedence': 'bulk',
+            'X-Entity-Ref-ID': `sciverse-${Date.now()}`
+          }
         });
         console.log(`[Email System] Email sent via Resend API successfully:`, response);
         return { success: true, method: 'resend', id: response.data?.id };
@@ -387,7 +444,14 @@ async function dispatchEmail(to: string, subject: string, html: string) {
         from: `"${senderName}" <${senderEmail}>`,
         to,
         subject,
+        text: plainText,
         html,
+        headers: {
+          'X-Auto-Response-Loop': 'auto-generated',
+          'Precedence': 'bulk',
+          'X-Mailer': 'SciVerse-Automated-Mailer',
+          'X-Entity-Ref-ID': `sciverse-${Date.now()}`
+        }
       });
       console.log(`[Email System] Email sent via SMTP successfully:`, info.messageId);
       return { success: true, method: 'smtp', id: info.messageId };
