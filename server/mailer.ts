@@ -343,7 +343,7 @@ export async function sendPendingEmail(schoolData: any) {
 
 // 2. Sends approved/confirmation email
 export async function sendConfirmationEmail(schoolData: any) {
-  const { id, name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo, smtpConfig } = schoolData;
+  const { id, name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo, smtpConfig, expectedStudents, expectedTeachers } = schoolData;
   const subject = `SciVerse 2K26 - ${isSolo ? 'Solo Registration' : 'Registration'} CONFIRMED! [${registrationId}]`;
   
   const content = `
@@ -373,10 +373,15 @@ export async function sendConfirmationEmail(schoolData: any) {
       </tr>
       ${isSolo ? '' : `
       <tr>
-        <td class="data-label" colspan="2">Allotted Student Quota</td>
+        <td class="data-label" colspan="2">Allotted School Quota & Booked Seats</td>
       </tr>
       <tr>
-        <td class="data-value" colspan="2" style="color: #60a5fa;">${quota} Max Attendees (including teachers)</td>
+        <td class="data-value" colspan="2" style="color: #60a5fa;">
+          ${(expectedStudents || 0) + (expectedTeachers || 0) > 0 
+            ? `${(expectedStudents || 0) + (expectedTeachers || 0)} Total Attendees Registered (${expectedStudents || 0} Students, ${expectedTeachers || 0} Teachers)`
+            : `${quota && quota < 9999 ? quota : 30} Max Attendees (including teachers)`
+          }
+        </td>
       </tr>
       `}
     </table>

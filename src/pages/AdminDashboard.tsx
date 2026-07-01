@@ -328,7 +328,9 @@ export default function AdminDashboard() {
             teacherInCharge: school.teacherInCharge,
             registrationId: regId,
             qrCodeUrl: qrPassUrl,
-            quota: 999999, // Unlimited allotment
+            quota: school.quota && school.quota < 9999 ? school.quota : ((school.expectedStudents || 0) + (school.expectedTeachers || 0) || 30),
+            expectedStudents: school.expectedStudents || 0,
+            expectedTeachers: school.expectedTeachers || 0,
             preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
             arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
             smtpConfig,
@@ -440,7 +442,9 @@ export default function AdminDashboard() {
           teacherInCharge: school.teacherInCharge,
           registrationId: regId,
           qrCodeUrl: qrPassUrl,
-          quota: 999999, // Unlimited allotment
+          quota: school.quota && school.quota < 9999 ? school.quota : ((school.expectedStudents || 0) + (school.expectedTeachers || 0) || 30),
+          expectedStudents: school.expectedStudents || 0,
+          expectedTeachers: school.expectedTeachers || 0,
           preferredDay: school.preferredDay || 'Day 2 - Exhibitions & Practical Labs (July 23)',
           arrivalTime: school.arrivalTime || '08:30 AM - 09:00 AM',
           smtpConfig,
