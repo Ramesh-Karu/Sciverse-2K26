@@ -307,8 +307,33 @@ export async function sendPendingEmail(schoolData: any) {
     <p>You will receive an official confirmation email containing your approved Admission Pass & QR Code once your application is formally approved.</p>
     <p style="font-size: 13px; color: #64748b;">(If you do not see the confirmation email in your inbox, please check your spam or junk folder.)</p>
     
-    <div class="button-container">
-      <a href="https://sujhc.site" class="button">Access School Portal</a>
+    <!-- Beautiful SciVerse Tech Card Container for actions -->
+    <div style="margin-top: 35px; padding: 25px; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 20px; text-align: center;">
+      <div style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #64748b; margin-bottom: 15px;">Official Portal Actions</div>
+      
+      <!-- Primary Action: Big sleek glowing high-tech button -->
+      <div style="margin-bottom: 18px;">
+        <a href="https://sujhc.site/?login=${registrationId}" style="display: block; background: #3b82f6; color: #ffffff !important; text-decoration: none; font-weight: 700; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; padding: 13px 20px; border-radius: 12px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25); text-align: center; font-family: 'Inter', sans-serif;">
+          ⚡ Access My Portal Dashboard
+        </a>
+      </div>
+      
+      <!-- Secondary Actions: Grid-like structure with clean borders, responsive -->
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+        <tr>
+          <td width="48%" valign="middle" style="padding-right: 6px;">
+            <a href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l" style="display: block; background: rgba(37, 211, 102, 0.08); border: 1px solid rgba(37, 211, 102, 0.3); color: #25d366 !important; text-decoration: none; font-weight: 600; font-size: 12px; padding: 10px 12px; border-radius: 10px; text-align: center; font-family: 'Inter', sans-serif;">
+              💬 WhatsApp Updates
+            </a>
+          </td>
+          <td width="4%" style="font-size: 1px; line-height: 1px;">&nbsp;</td>
+          <td width="48%" valign="middle" style="padding-left: 6px;">
+            <a href="https://sujhc.site" style="display: block; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1 !important; text-decoration: none; font-weight: 600; font-size: 12px; padding: 10px 12px; border-radius: 10px; text-align: center; font-family: 'Inter', sans-serif;">
+              🌐 Visit Exhibition Site
+            </a>
+          </td>
+        </tr>
+      </table>
     </div>
   `;
 
@@ -379,10 +404,33 @@ export async function sendConfirmationEmail(schoolData: any) {
       <li style="margin-bottom: 8px; color: #facc15;">If you do not see the confirmation email in your inbox, please check your spam or junk folder.</li>
     </ul>
     
-    <div class="button-container">
-      <a href="https://sujhc.site/?login=${id}${isSolo ? '&solo=true' : ''}" class="button" style="background-color: #10b981; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">Go to Portal</a>
-      <a href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l" class="button" style="background-color: #25d366; box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3); margin-left: 10px;">Join WhatsApp Updates</a>
-      <a href="https://sujhc.site" class="button" style="background-color: #3b82f6; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3); margin-left: 10px;">Visit Website</a>
+    <!-- Beautiful SciVerse Tech Card Container for actions -->
+    <div style="margin-top: 35px; padding: 25px; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 20px; text-align: center;">
+      <div style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #64748b; margin-bottom: 15px;">Official Portal Actions</div>
+      
+      <!-- Primary Action: Big sleek glowing high-tech button -->
+      <div style="margin-bottom: 18px;">
+        <a href="https://sujhc.site/?login=${id || registrationId}${isSolo ? '&solo=true' : ''}" style="display: block; background: #10b981; color: #030712 !important; text-decoration: none; font-weight: 700; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; padding: 13px 20px; border-radius: 12px; box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25); text-align: center; font-family: 'Inter', sans-serif;">
+          ⚡ Enter Secure Student Portal
+        </a>
+      </div>
+      
+      <!-- Secondary Actions: Grid-like structure with clean borders, responsive -->
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+        <tr>
+          <td width="48%" valign="middle" style="padding-right: 6px;">
+            <a href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l" style="display: block; background: rgba(37, 211, 102, 0.08); border: 1px solid rgba(37, 211, 102, 0.3); color: #25d366 !important; text-decoration: none; font-weight: 600; font-size: 12px; padding: 10px 12px; border-radius: 10px; text-align: center; font-family: 'Inter', sans-serif;">
+              💬 WhatsApp Updates
+            </a>
+          </td>
+          <td width="4%" style="font-size: 1px; line-height: 1px;">&nbsp;</td>
+          <td width="48%" valign="middle" style="padding-left: 6px;">
+            <a href="https://sujhc.site" style="display: block; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1 !important; text-decoration: none; font-weight: 600; font-size: 12px; padding: 10px 12px; border-radius: 10px; text-align: center; font-family: 'Inter', sans-serif;">
+              🌐 Visit Exhibition Site
+            </a>
+          </td>
+        </tr>
+      </table>
     </div>
   `;
 
