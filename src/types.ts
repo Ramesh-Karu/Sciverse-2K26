@@ -5,6 +5,7 @@ export interface School {
   teacherInCharge: string;
   teacherInChargeEmail?: string;
   teacherInChargePhone?: string;
+  teacherInChargeWhatsapp?: string;
   contact: string;
   whatsapp?: string;
   email: string;

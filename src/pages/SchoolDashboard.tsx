@@ -112,6 +112,7 @@ export default function SchoolDashboard() {
         passData.teacherInCharge = school.teacherInCharge;
         passData.teacherInChargeEmail = school.teacherInChargeEmail || '';
         passData.teacherInChargePhone = school.teacherInChargePhone || '';
+        passData.teacherInChargeWhatsapp = school.teacherInChargeWhatsapp || '';
         passData.expectedStudents = school.expectedStudents || 0;
         passData.expectedTeachers = school.expectedTeachers || 0;
       }
@@ -429,6 +430,7 @@ export default function SchoolDashboard() {
                 teacherInCharge: school.teacherInCharge,
                 teacherInChargeEmail: school.teacherInChargeEmail,
                 teacherInChargePhone: school.teacherInChargePhone,
+                teacherInChargeWhatsapp: school.teacherInChargeWhatsapp,
                 contact: school.contact,
                 email: school.email,
                 address: school.address,

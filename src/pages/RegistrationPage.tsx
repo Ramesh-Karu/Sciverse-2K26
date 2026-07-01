@@ -37,6 +37,9 @@ export default function RegistrationPage() {
         if (!parsed.whatsapp || parsed.whatsapp === "") {
           parsed.whatsapp = "+94 ";
         }
+        if (!parsed.teacherInChargeWhatsapp || parsed.teacherInChargeWhatsapp === "") {
+          parsed.teacherInChargeWhatsapp = "+94 ";
+        }
         return parsed;
       } catch (e) {}
     }
@@ -46,6 +49,7 @@ export default function RegistrationPage() {
       teacherInCharge: '',
       teacherInChargeEmail: '',
       teacherInChargePhone: '',
+      teacherInChargeWhatsapp: '+94 ',
       contact: '',
       whatsapp: '+94 ',
       email: '',
@@ -219,8 +223,8 @@ export default function RegistrationPage() {
           return false;
         }
       } else if (step === 3) {
-        if (!formData.principalName.trim() || !formData.teacherInCharge.trim() || !formData.teacherInChargeEmail.trim() || !formData.teacherInChargePhone.trim()) {
-          setErrorMessage("Please enter Principal name, Teacher-in-Charge name, email, and phone number.");
+        if (!formData.principalName.trim() || !formData.teacherInCharge.trim() || !formData.teacherInChargeEmail.trim() || !formData.teacherInChargePhone.trim() || !formData.teacherInChargeWhatsapp.trim()) {
+          setErrorMessage("Please enter Principal name, Teacher-in-Charge name, email, phone number, and WhatsApp number.");
           return false;
         }
         if (!formData.teacherInChargeEmail.includes('@')) {
@@ -315,6 +319,7 @@ export default function RegistrationPage() {
               name: formData.name,
               email: formData.email,
               teacherInCharge: formData.teacherInCharge,
+              teacherInChargeEmail: formData.teacherInChargeEmail,
               registrationId: regId,
               expectedStudents: Number(formData.expectedStudents),
               expectedTeachers: Number(formData.expectedTeachers),
@@ -323,7 +328,7 @@ export default function RegistrationPage() {
           });
         } catch (emailErr) {}
 
-        // Send Pending WhatsApp message automatically
+        // Send Pending WhatsApp message automatically (School Number)
         try {
           const pendingMsg = `*SciVerse 2K26 Registration Received!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${formData.teacherInCharge}*,\n\nThank you for registering *${formData.name}* for SciVerse 2K26! Your registration has been successfully received and is currently *Pending* review.\n\n*Admission & Portal Details:*\n============================\n🎫 *Temporary ID:* ${regId}\n📅 *Preferred Day:* ${formData.preferredDay}\n👥 *Expected Delegation:* ${formData.expectedStudents} Students & ${formData.expectedTeachers} Teachers\n\nOnce approved, you will receive another WhatsApp confirmation with your final admission details, portal link, and QR Entry Pass.\n\n*Official Updates Group:*\n============================\nJoin our official SciVerse updates channel to stay informed:\nhttps://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l\n\nSee you soon!`;
 
@@ -337,6 +342,22 @@ export default function RegistrationPage() {
           });
         } catch (waErr) {
           console.error("Automatic WhatsApp pending dispatch failed:", waErr);
+        }
+
+        // Send Pending WhatsApp message automatically (Teacher's Number)
+        try {
+          const pendingMsg = `*SciVerse 2K26 Registration Received!* 🚀\nOrganized by: *Science Union, Jaffna Hindu College*\n\nDear *${formData.teacherInCharge}*,\n\nThank you for registering *${formData.name}* for SciVerse 2K26! Your registration has been successfully received and is currently *Pending* review.\n\n*Admission & Portal Details:*\n============================\n🎫 *Temporary ID:* ${regId}\n📅 *Preferred Day:* ${formData.preferredDay}\n👥 *Expected Delegation:* ${formData.expectedStudents} Students & ${formData.expectedTeachers} Teachers\n\nOnce approved, you will receive another WhatsApp confirmation with your final admission details, portal link, and QR Entry Pass.\n\n*Official Updates Group:*\n============================\nJoin our official SciVerse updates channel to stay informed:\nhttps://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l\n\nSee you soon!`;
+
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: getWahaHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              phone: formData.teacherInChargeWhatsapp || formData.teacherInChargePhone || '',
+              message: pendingMsg
+            })
+          });
+        } catch (waErr) {
+          console.error("Automatic WhatsApp pending teacher dispatch failed:", waErr);
         }
 
         try {
@@ -360,6 +381,7 @@ export default function RegistrationPage() {
           teacherInCharge: formData.teacherInCharge,
           teacherInChargeEmail: formData.teacherInChargeEmail,
           teacherInChargePhone: formData.teacherInChargePhone,
+          teacherInChargeWhatsapp: formData.teacherInChargeWhatsapp,
           principalName: formData.principalName,
           email: formData.email,
           contact: formData.contact,
@@ -427,6 +449,7 @@ export default function RegistrationPage() {
               registrationId: regId,
               expectedStudents: 1,
               expectedTeachers: 0,
+              isSolo: true,
               smtpConfig,
             })
           });
@@ -834,6 +857,17 @@ export default function RegistrationPage() {
                                   placeholder="+94 77 123 4567"
                                   value={formData.teacherInChargePhone}
                                   onChange={e => setFormData({...formData, teacherInChargePhone: e.target.value})}
+                                  className="w-full bg-slate-900/60 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1">TEACHER WHATSAPP</label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="e.g. +94 77 123 4567"
+                                  value={formData.teacherInChargeWhatsapp}
+                                  onChange={e => setFormData({...formData, teacherInChargeWhatsapp: handleWhatsAppChange(e.target.value)})}
                                   className="w-full bg-slate-900/60 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-white"
                                 />
                               </div>

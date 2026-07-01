@@ -270,10 +270,74 @@ function wrapHtmlEmail(title: string, bodyContent: string, accentColor = '#3b82f
 
 // 1. Sends pending registration email
 export async function sendPendingEmail(schoolData: any) {
-  const { name, email, teacherInCharge, registrationId, expectedStudents, expectedTeachers, smtpConfig } = schoolData;
-  const subject = `SciVerse 2K26 - Registration Received [${registrationId}]`;
+  const { name, email, teacherInCharge, teacherInChargeEmail, registrationId, expectedStudents, expectedTeachers, smtpConfig, isSolo } = schoolData;
+  const subject = isSolo 
+    ? `SciVerse 2K26 - Registration Received [${registrationId}]`
+    : `SciVerse 2K26 - School Registration Received [${registrationId}]`;
   
-  const content = `
+  const content = isSolo ? `
+    <div class="badge">REGISTRATION PENDING</div>
+    <h1>Registration Received!</h1>
+    <p>Dear <strong>${teacherInCharge}</strong>,</p>
+    <p>Thank you for submitting your official registration request for <strong>SciVerse 2K26</strong>. Our executive organizing board has received your records and is currently processing your admission details.</p>
+    
+    <div class="divider"></div>
+    
+    <table class="data-grid">
+      <tr>
+        <td class="data-label" width="50%">Student Name</td>
+        <td class="data-label" width="50%">Temporary Access ID</td>
+      </tr>
+      <tr>
+        <td class="data-value">${name}</td>
+        <td class="data-value" style="font-family: monospace; color: #3b82f6;">${registrationId}</td>
+      </tr>
+      <tr>
+        <td class="data-label">Admission Type</td>
+        <td class="data-label">Registered Status</td>
+      </tr>
+      <tr>
+        <td class="data-value">Student Delegate</td>
+        <td class="data-value" style="color: #facc15;">Pending Review</td>
+      </tr>
+    </table>
+    
+    <div class="divider"></div>
+    
+    <p><strong>What happens next?</strong></p>
+    <p>While our administrators review your details, you can log into your secure individual portal using your <strong>Temporary Access ID (${registrationId})</strong> to check your profile, review schedules, and view official SciVerse guidelines.</p>
+    <p>Once approved, you will receive an official confirmation email containing your approved Admission Pass and QR entry code.</p>
+    <p style="font-size: 13px; color: #64748b;">(If you do not see the confirmation email in your inbox, please check your spam or junk folder.)</p>
+    
+    <!-- Beautiful SciVerse Tech Card Container for actions -->
+    <div style="margin-top: 35px; padding: 25px; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 20px; text-align: center;">
+      <div style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #64748b; margin-bottom: 15px;">Official Portal Actions</div>
+      
+      <!-- Primary Action: Big sleek glowing high-tech button -->
+      <div style="margin-bottom: 18px;">
+        <a href="https://sujhc.site/?login=${registrationId}&solo=true" style="display: block; background: #3b82f6; color: #ffffff !important; text-decoration: none; font-weight: 700; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; padding: 13px 20px; border-radius: 12px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25); text-align: center; font-family: 'Inter', sans-serif;">
+          ⚡ Enter Student Portal
+        </a>
+      </div>
+      
+      <!-- Secondary Actions: Grid-like structure with clean borders, responsive -->
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+        <tr>
+          <td width="48%" valign="middle" style="padding-right: 6px;">
+            <a href="https://chat.whatsapp.com/LLz5gMnnPS79RgyCizDR0l" style="display: block; background: rgba(37, 211, 102, 0.08); border: 1px solid rgba(37, 211, 102, 0.3); color: #25d366 !important; text-decoration: none; font-weight: 600; font-size: 12px; padding: 10px 12px; border-radius: 10px; text-align: center; font-family: 'Inter', sans-serif;">
+              💬 WhatsApp Updates
+            </a>
+          </td>
+          <td width="4%" style="font-size: 1px; line-height: 1px;">&nbsp;</td>
+          <td width="48%" valign="middle" style="padding-left: 6px;">
+            <a href="https://sujhc.site" style="display: block; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1 !important; text-decoration: none; font-weight: 600; font-size: 12px; padding: 10px 12px; border-radius: 10px; text-align: center; font-family: 'Inter', sans-serif;">
+              🌐 Visit Exhibition Site
+            </a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  ` : `
     <div class="badge">REGISTRATION PENDING</div>
     <h1>Registration Received!</h1>
     <p>Dear <strong>${teacherInCharge}</strong>,</p>
@@ -336,28 +400,33 @@ export async function sendPendingEmail(schoolData: any) {
       </table>
     </div>
   `;
-
+ 
   const html = wrapHtmlEmail(subject, content, '#3b82f6');
-  return await dispatchEmail(email, subject, html, smtpConfig);
+  const mainResult = await dispatchEmail(email, subject, html, smtpConfig);
+  if (!isSolo && teacherInChargeEmail && teacherInChargeEmail.trim() !== '' && teacherInChargeEmail.toLowerCase().trim() !== email.toLowerCase().trim()) {
+    console.log(`[Email System] Also sending pending email copy to teacher: ${teacherInChargeEmail}`);
+    await dispatchEmail(teacherInChargeEmail, subject, html, smtpConfig);
+  }
+  return mainResult;
 }
 
 // 2. Sends approved/confirmation email
 export async function sendConfirmationEmail(schoolData: any) {
-  const { id, name, email, teacherInCharge, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo, smtpConfig, expectedStudents, expectedTeachers } = schoolData;
-  const subject = `SciVerse 2K26 - ${isSolo ? 'Solo Registration' : 'Registration'} CONFIRMED! [${registrationId}]`;
+  const { id, name, email, teacherInCharge, teacherInChargeEmail, registrationId, qrCodeUrl, quota, preferredDay, arrivalTime, isSolo, smtpConfig, expectedStudents, expectedTeachers } = schoolData;
+  const subject = `SciVerse 2K26 - ${isSolo ? 'Individual Registration' : 'School Registration'} CONFIRMED! [${registrationId}]`;
   
   const content = `
     <div class="badge badge-success">REGISTRATION CONFIRMED</div>
     <h1 style="color: #10b981;">SciVerse 2K26 Entry Pass Issued!</h1>
     <p>Dear <strong>${teacherInCharge}</strong>,</p>
-    <p>We are thrilled to inform you that your ${isSolo ? 'solo student' : 'school delegation'} application for <strong>SciVerse 2K26</strong> has been officially approved! Your master entrance pass has been generated, and your seating allocations are confirmed.</p>
+    <p>We are thrilled to inform you that your ${isSolo ? 'individual student' : 'school delegation'} application for <strong>SciVerse 2K26</strong> has been officially approved! Your master entrance pass has been generated, and your seating allocations are confirmed.</p>
     
     <div class="divider"></div>
     
     <table class="data-grid">
       <tr>
         <td class="data-label" width="50%">${isSolo ? 'Participant Name' : 'School Name'}</td>
-        <td class="data-label" width="50%">${isSolo ? 'Solo' : 'School'} Registration Code</td>
+        <td class="data-label" width="50%">${isSolo ? 'Individual' : 'School'} Registration Code</td>
       </tr>
       <tr>
         <td class="data-value">${name}</td>
@@ -377,9 +446,9 @@ export async function sendConfirmationEmail(schoolData: any) {
       </tr>
       <tr>
         <td class="data-value" colspan="2" style="color: #60a5fa;">
-          ${(expectedStudents || 0) + (expectedTeachers || 0) > 0 
-            ? `${(expectedStudents || 0) + (expectedTeachers || 0)} Total Attendees Registered (${expectedStudents || 0} Students, ${expectedTeachers || 0} Teachers)`
-            : `${quota && quota < 9999 ? quota : 30} Max Attendees (including teachers)`
+          ${(Number(expectedStudents) || 0) + (Number(expectedTeachers) || 0) > 0 
+            ? `${(Number(expectedStudents) || 0) + (Number(expectedTeachers) || 0)} Total Attendees Booked (${Number(expectedStudents) || 0} Students, ${Number(expectedTeachers) || 0} Teachers)`
+            : `${quota && Number(quota) < 1000 ? Number(quota) : 30} Max Attendees (including teachers)`
           }
         </td>
       </tr>
@@ -440,7 +509,12 @@ export async function sendConfirmationEmail(schoolData: any) {
   `;
 
   const html = wrapHtmlEmail(subject, content, '#10b981');
-  return await dispatchEmail(email, subject, html, smtpConfig);
+  const mainResult = await dispatchEmail(email, subject, html, smtpConfig);
+  if (!isSolo && teacherInChargeEmail && teacherInChargeEmail.trim() !== '' && teacherInChargeEmail.toLowerCase().trim() !== email.toLowerCase().trim()) {
+    console.log(`[Email System] Also sending confirmation email copy to teacher: ${teacherInChargeEmail}`);
+    await dispatchEmail(teacherInChargeEmail, subject, html, smtpConfig);
+  }
+  return mainResult;
 }
 
 // 3. Sends test email to verify SMTP or Resend
@@ -479,8 +553,7 @@ async function dispatchEmail(to: string, subject: string, html: string, smtpConf
           text: plainText,
           html,
           headers: {
-            'X-Auto-Response-Loop': 'auto-generated',
-            'Precedence': 'bulk',
+            'X-Auto-Response-Loop': 'none',
             'X-Entity-Ref-ID': `sciverse-${Date.now()}`
           }
         });
@@ -500,8 +573,7 @@ async function dispatchEmail(to: string, subject: string, html: string, smtpConf
         text: plainText,
         html,
         headers: {
-          'X-Auto-Response-Loop': 'auto-generated',
-          'Precedence': 'bulk',
+          'X-Auto-Response-Loop': 'none',
           'X-Mailer': 'SciVerse-Automated-Mailer',
           'X-Entity-Ref-ID': `sciverse-${Date.now()}`
         }
