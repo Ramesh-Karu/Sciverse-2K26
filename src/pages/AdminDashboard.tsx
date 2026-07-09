@@ -10,7 +10,7 @@ import { SchoolPassCard, CardSchoolData } from '../components/StylishCardGenerat
 import QRScanner from '../components/QRScanner';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  ShieldAlert, Check, X, Shield, Calendar, Users, Cpu, FileText, 
+  ShieldAlert, Check, X, Shield, Calendar, Users, UserMinus, Cpu, FileText, 
   Settings, UserCheck, Search, Sliders, Play, TrendingUp, Sparkles, AlertTriangle, RefreshCcw, Download, Trash2, ShieldCheck, QrCode,
   Mail, MessageSquare, ChevronDown, User, Phone, Loader2, MessageCircle
 } from 'lucide-react';
@@ -696,7 +696,17 @@ export default function AdminDashboard() {
       const targetDay = eventDays.find(d => d.id === dayId);
       if (!targetDay) return;
 
-      const details = targetDay.reservedDetails || { vips: 0, judges: 0, organizers: 0, teachers: 0, media: 0, guests: 0 };
+      const currentDetails = targetDay.reservedDetails || {};
+      const details = {
+        vips: currentDetails.vips || 0,
+        judges: currentDetails.judges || 0,
+        organizers: currentDetails.organizers || 0,
+        teachers: currentDetails.teachers || 0,
+        media: currentDetails.media || 0,
+        guests: currentDetails.guests || 0,
+        students: currentDetails.students || 0
+      };
+
       const updatedDetails = {
         ...details,
         [category]: Number(value)
@@ -708,8 +718,96 @@ export default function AdminDashboard() {
         reservedDetails: updatedDetails,
         reservedSeats: sumReserved
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toastError(`Failed to update seats: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  // Quick reserve 500 students for July 23rd (day-2) and July 24th (day-3)
+  const handleBatchReserve500Students = async () => {
+    try {
+      const daysToUpdate = ['day-2', 'day-3'];
+      let updatedAny = false;
+
+      for (const dayId of daysToUpdate) {
+        const dayRef = doc(db, 'eventDays', dayId);
+        const targetDay = eventDays.find(d => d.id === dayId);
+        if (!targetDay) continue;
+
+        const currentDetails = targetDay.reservedDetails || {};
+        const updatedDetails = {
+          vips: currentDetails.vips || 0,
+          judges: currentDetails.judges || 0,
+          organizers: currentDetails.organizers || 0,
+          teachers: currentDetails.teachers || 0,
+          media: currentDetails.media || 0,
+          guests: currentDetails.guests || 0,
+          students: 500
+        };
+
+        const sumReserved = Object.values(updatedDetails).reduce((acc: number, curr: any) => acc + Number(curr), 0);
+
+        await updateDoc(dayRef, {
+          reservedDetails: updatedDetails,
+          reservedSeats: sumReserved
+        });
+        updatedAny = true;
+      }
+
+      if (updatedAny) {
+        success('Successfully reserved 500 seats for students on July 23rd and 24th!');
+      } else {
+        toastWarning('No matching event days found to apply the student reservation.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toastError(`Failed to apply student reservations: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  // Quick action to reduce student reservation seats (by 120 on July 23rd and 150 on July 24th)
+  const handleBatchReduceStudents = async () => {
+    try {
+      const reductions: { [key: string]: number } = { 'day-2': 120, 'day-3': 150 };
+      let updatedAny = false;
+
+      for (const [dayId, reduceAmount] of Object.entries(reductions)) {
+        const dayRef = doc(db, 'eventDays', dayId);
+        const targetDay = eventDays.find(d => d.id === dayId);
+        if (!targetDay) continue;
+
+        const currentDetails = targetDay.reservedDetails || {};
+        const currentStudents = currentDetails.students !== undefined ? Number(currentDetails.students) : 500;
+        const newStudents = Math.max(0, currentStudents - reduceAmount);
+
+        const updatedDetails = {
+          vips: currentDetails.vips || 0,
+          judges: currentDetails.judges || 0,
+          organizers: currentDetails.organizers || 0,
+          teachers: currentDetails.teachers || 0,
+          media: currentDetails.media || 0,
+          guests: currentDetails.guests || 0,
+          students: newStudents
+        };
+
+        const sumReserved = Object.values(updatedDetails).reduce((acc: number, curr: any) => acc + Number(curr), 0);
+
+        await updateDoc(dayRef, {
+          reservedDetails: updatedDetails,
+          reservedSeats: sumReserved
+        });
+        updatedAny = true;
+      }
+
+      if (updatedAny) {
+        success('Successfully reduced student reservations by 120 on July 23rd and 150 on July 24th!');
+      } else {
+        toastWarning('No matching event days found to apply the reductions.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toastError(`Failed to apply student reductions: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -1711,6 +1809,32 @@ export default function AdminDashboard() {
               
               {/* SEATING ALLOCATIONS */}
               <div className="lg:col-span-8 space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-blue-500/5 border border-blue-500/25 p-5 rounded-2xl">
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-blue-400" />
+                      Quick Seat Allocation Actions
+                    </h3>
+                    <p className="text-xs text-slate-400">Allocate bulk capacity constraints or apply custom reductions instantly</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <button
+                      onClick={handleBatchReserve500Students}
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/20 rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20 hover:scale-[1.02] w-full sm:w-auto"
+                    >
+                      <Users className="w-4 h-4" />
+                      Reserve 500 Students
+                    </button>
+                    <button
+                      onClick={handleBatchReduceStudents}
+                      className="px-4 py-2.5 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/10 hover:scale-[1.02] w-full sm:w-auto"
+                    >
+                      <UserMinus className="w-4 h-4" />
+                      Reduce Students (-120 & -150)
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <h3 className="text-lg font-bold text-white">Event Seating Allocations</h3>
                   <p className="text-xs text-slate-400">Configure safety thresholds and reserve seating bounds for days</p>
@@ -1718,7 +1842,16 @@ export default function AdminDashboard() {
 
                 <div className="space-y-6">
                   {eventDays.map((day) => {
-                    const rDetails = day.reservedDetails || { vips: 0, judges: 0, organizers: 0, teachers: 0, media: 0, guests: 0 };
+                    const rDetails = {
+                      vips: 0,
+                      judges: 0,
+                      organizers: 0,
+                      teachers: 0,
+                      media: 0,
+                      guests: 0,
+                      students: 0,
+                      ...(day.reservedDetails || {})
+                    };
                     return (
                       <div key={day.id} className="p-5 bg-white/5 border border-white/10 rounded-2xl space-y-4">
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
@@ -1732,7 +1865,7 @@ export default function AdminDashboard() {
                         </div>
 
                         {/* CONFIG GRID */}
-                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
                           <div>
                             <label className="block text-[9px] text-slate-500 font-mono uppercase mb-1">VIPs</label>
                             <input 
@@ -1785,6 +1918,15 @@ export default function AdminDashboard() {
                               value={rDetails.guests}
                               onChange={e => handleSeatChange(day.id, 'guests', Number(e.target.value))}
                               className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-blue-400 font-mono uppercase mb-1">Students</label>
+                            <input 
+                              type="number"
+                              value={rDetails.students}
+                              onChange={e => handleSeatChange(day.id, 'students', Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-2.5 py-1.5 text-xs text-white text-center font-mono"
                             />
                           </div>
                         </div>

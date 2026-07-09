@@ -54,6 +54,7 @@ export interface EventDay {
     teachers: number;
     media: number;
     guests: number;
+    students?: number;
   };
 }
 
