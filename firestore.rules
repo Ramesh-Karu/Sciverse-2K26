@@ -123,5 +123,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // Anonymous Reviews & Feedback
+    match /reviews/{reviewId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
   }
 }

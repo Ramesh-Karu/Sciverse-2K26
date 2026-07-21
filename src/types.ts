@@ -106,3 +106,14 @@ export interface SoloStudent {
   checkInTime?: string;
   createdAt: string;
 }
+
+export interface FeedbackReview {
+  id?: string;
+  userType: 'viewer' | 'teacher';
+  experience: string;
+  canBeChanged: string;
+  rating: number; // 1-10 points rating
+  futureExpectations: string;
+  impact: string;
+  createdAt: string;
+}

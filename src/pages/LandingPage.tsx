@@ -716,6 +716,35 @@ export default function LandingPage() {
           )}
         </motion.div>
 
+        {/* FEEDBACK & RATINGS CTA BANNER */}
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6 }}
+          className="bg-gradient-to-r from-blue-900/30 via-[#080b11] to-indigo-950/30 border border-blue-500/20 p-6 md:p-8 rounded-3xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
+        >
+          <div className="space-y-2">
+            <span className="px-2.5 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full text-[9px] font-mono tracking-widest uppercase inline-block">
+              Exhibition Critiques
+            </span>
+            <h3 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
+              Viewer & Teacher Anonymous Feedback
+            </h3>
+            <p className="text-xs md:text-sm text-slate-400 max-w-2xl leading-relaxed">
+              We want to hear your genuine feedback! If you visited our labs or presented as a mentor, please share your experience. Rate us out of 10 stars and help Jaffna Hindu College Science Union shape future editions.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/feedback')}
+            className="w-full md:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/20 rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20 hover:scale-[1.02] shrink-0"
+          >
+            Submit Anonymous Review
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </motion.div>
+
         {/* LIVE BROADCASTS & EVENT TIMELINES */}
         <motion.div 
           initial={{ opacity: 0, y: 30 }}

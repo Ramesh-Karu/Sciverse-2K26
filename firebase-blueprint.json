@@ -132,6 +132,22 @@
         "sentAt": { "type": "string" }
       },
       "required": ["email", "subject", "message", "type", "sentAt"]
+    },
+    "FeedbackReview": {
+      "title": "FeedbackReview",
+      "description": "Anonymous ratings and reviews from viewers and teachers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userType": { "type": "string", "enum": ["viewer", "teacher"] },
+        "experience": { "type": "string" },
+        "canBeChanged": { "type": "string" },
+        "rating": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "futureExpectations": { "type": "string" },
+        "impact": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userType", "experience", "canBeChanged", "rating", "futureExpectations", "impact", "createdAt"]
     }
   },
   "firestore": {
@@ -166,6 +182,10 @@
     "/announcements/{announcementId}": {
       "schema": "Announcement",
       "description": "Organizers broadcast communications"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "FeedbackReview",
+      "description": "Viewer and teacher anonymous feedback reviews"
     }
   }
 }

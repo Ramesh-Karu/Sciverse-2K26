@@ -60,6 +60,16 @@ export default function Navbar() {
         >
           School Registration
         </button>
+        <button 
+          onClick={() => navigate('/feedback')} 
+          className={`text-sm font-medium transition-all ${
+            location.pathname === '/feedback' 
+              ? 'text-blue-400 border-b-2 border-blue-500 pb-1' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          Submit Feedback
+        </button>
         
         {user && (
           <button 
@@ -171,6 +181,14 @@ export default function Navbar() {
               }`}
             >
               School Registration
+            </button>
+            <button 
+              onClick={() => { navigate('/feedback'); setIsMenuOpen(false); }} 
+              className={`w-full text-left py-3 text-sm font-medium border-b border-white/5 ${
+                location.pathname === '/feedback' ? 'text-blue-400' : 'text-slate-300'
+              }`}
+            >
+              Submit Feedback
             </button>
             
             {user && (

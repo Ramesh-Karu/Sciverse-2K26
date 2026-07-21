@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, doc, updateDoc, getDocs, deleteDoc, addDoc, writeBatch, setDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { School, Participant, EventDay, ArrivalSlot, NotificationLog, SoloStudent } from '../types';
+import { School, Participant, EventDay, ArrivalSlot, NotificationLog, SoloStudent, FeedbackReview } from '../types';
 import Navbar from '../components/Navbar';
 import RobotAssistant from '../components/RobotAssistant';
 import { SchoolPassCard, CardSchoolData } from '../components/StylishCardGenerator';
@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldAlert, Check, X, Shield, Calendar, Users, UserMinus, Cpu, FileText, 
   Settings, UserCheck, Search, Sliders, Play, TrendingUp, Sparkles, AlertTriangle, RefreshCcw, Download, Trash2, ShieldCheck, QrCode,
-  Mail, MessageSquare, ChevronDown, User, Phone, Loader2, MessageCircle
+  Mail, MessageSquare, ChevronDown, User, Phone, Loader2, MessageCircle, Star
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -27,9 +27,10 @@ export default function AdminDashboard() {
   const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [soloStudents, setSoloStudents] = useState<SoloStudent[]>([]);
   const [admins, setAdmins] = useState<{ id: string; email: string; addedBy?: string; addedAt?: string }[]>([]);
+  const [reviews, setReviews] = useState<FeedbackReview[]>([]);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'approvals' | 'passes' | 'capacities' | 'checkin' | 'predictions' | 'logs' | 'admins' | 'soloStudents'>('approvals');
+  const [activeTab, setActiveTab] = useState<'approvals' | 'passes' | 'capacities' | 'checkin' | 'predictions' | 'logs' | 'admins' | 'soloStudents' | 'reviews'>('approvals');
   const [soloTab, setSoloTab] = useState<'pending' | 'approved' | 'rejected' | 'checkin'>('pending');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +39,11 @@ export default function AdminDashboard() {
   const [isSavingLimit, setIsSavingLimit] = useState(false);
   const [newSlotTime, setNewSlotTime] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
+  
+  // Reviews Filters state
+  const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | 'viewer' | 'teacher'>('all');
+  const [reviewRatingFilter, setReviewRatingFilter] = useState<string>('all');
+  const [reviewSearchText, setReviewSearchText] = useState<string>('');
 
   // WhatsApp manual push notification state
   const [waModalData, setWaModalData] = useState<{
@@ -268,6 +274,16 @@ export default function AdminDashboard() {
       handleFirestoreError(error, OperationType.LIST, 'soloStudents');
     });
 
+    // Subscribe to anonymous reviews
+    const unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FeedbackReview));
+      // Sort newest first
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setReviews(list);
+    }, (error) => {
+      console.error("Error subscribing to anonymous reviews:", error);
+    });
+
     return () => {
       unsubSchools();
       unsubDays();
@@ -275,6 +291,7 @@ export default function AdminDashboard() {
       unsubLogs();
       unsubAdmins();
       unsubSolo();
+      unsubReviews();
     };
   }, [user, authLoading, navigate]);
 
@@ -1115,6 +1132,47 @@ export default function AdminDashboard() {
     success("Master attendance sheet exported as CSV!");
   };
 
+  const handleExportReviewsCSV = () => {
+    if (reviews.length === 0) {
+      toastWarning("No reviews found to export.");
+      return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Review ID,User Type,Rating (Out of 10),Overall Experience,Suggested Changes,Future Expectations,Impact,Submission Timestamp\r\n";
+
+    reviews.forEach(r => {
+      const cleanExp = (r.experience || "").replace(/"/g, '""').replace(/\n/g, ' ');
+      const cleanChange = (r.canBeChanged || "").replace(/"/g, '""').replace(/\n/g, ' ');
+      const cleanFuture = (r.futureExpectations || "").replace(/"/g, '""').replace(/\n/g, ' ');
+      const cleanImpact = (r.impact || "").replace(/"/g, '""').replace(/\n/g, ' ');
+      const row = `"${r.id || ''}","${r.userType.toUpperCase()}",${r.rating},"${cleanExp}","${cleanChange}","${cleanFuture}","${cleanImpact}","${r.createdAt}"`;
+      csvContent += row + "\r\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `SciVerse_2K26_Exhibition_Reviews.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    success("Anonymous reviews exported successfully as CSV!");
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!window.confirm("Are you sure you want to permanently delete this anonymous feedback review? This action is irreversible.")) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'reviews', reviewId));
+      success("Anonymous review deleted successfully.");
+    } catch (err) {
+      console.error("Error deleting review:", err);
+      toastError("Failed to delete review.");
+    }
+  };
+
   const handleAddAdmin = async (e: FormEvent) => {
     e.preventDefault();
     const emailToAdd = newAdminEmail.trim().toLowerCase();
@@ -1287,6 +1345,7 @@ export default function AdminDashboard() {
                 {activeTab === 'predictions' && 'Gemini Congestion AI'}
                 {activeTab === 'logs' && 'Notification Logs'}
                 {activeTab === 'admins' && 'Admin Management'}
+                {activeTab === 'reviews' && 'Anonymous Ratings & Reviews'}
               </span>
               <ChevronDown className={`w-4 h-4 transition-transform ${isMobileMenuOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -1308,6 +1367,7 @@ export default function AdminDashboard() {
                     { id: 'predictions', label: 'Gemini Congestion AI' },
                     { id: 'logs', label: 'Notification Logs' },
                     { id: 'admins', label: 'Admin Management' },
+                    { id: 'reviews', label: `Anonymous Reviews (${reviews.length})` },
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -1399,6 +1459,15 @@ export default function AdminDashboard() {
               }`}
             >
               Admin Management
+            </button>
+
+            <button
+              onClick={() => setActiveTab('reviews')}
+              className={`px-4 py-2.5 text-xs font-bold font-mono uppercase tracking-wider transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'reviews' ? 'text-amber-400 border-amber-500' : 'text-slate-400 border-transparent hover:text-white'
+              }`}
+            >
+              Anonymous Reviews ({reviews.length})
             </button>
           </div>
         </div>
@@ -2824,6 +2893,249 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 8: ANONYMOUS FEEDBACK & RATINGS */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-6">
+              
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-400" />
+                    Anonymous Exhibition Critiques & Ratings
+                  </h3>
+                  <p className="text-xs text-slate-400">View and evaluate anonymous surveys from viewers and teacher-mentors</p>
+                </div>
+                
+                <button
+                  onClick={handleExportReviewsCSV}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 rounded-xl text-xs font-mono font-bold text-slate-950 transition cursor-pointer shadow-[0_4px_12px_rgba(245,158,11,0.2)]"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Reviews CSV
+                </button>
+              </div>
+
+              {/* Reviews Overview Metrics cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-mono block uppercase">Total Reviews</span>
+                  <p className="text-2xl font-bold font-mono text-white mt-1">{reviews.length}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Recorded anonymously</p>
+                </div>
+
+                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-mono block uppercase">Average Star Rating</span>
+                  <p className="text-2xl font-bold font-mono text-amber-400 mt-1">
+                    {reviews.length > 0 
+                      ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
+                      : "0.0"
+                    }
+                    <span className="text-xs font-normal text-slate-500 font-sans"> / 10.0</span>
+                  </p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Organizers rating score</p>
+                </div>
+
+                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-mono block uppercase">Viewers / Students</span>
+                  <p className="text-2xl font-bold font-mono text-blue-400 mt-1">
+                    {reviews.filter(r => r.userType === 'viewer').length}
+                  </p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">General observers</p>
+                </div>
+
+                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                  <span className="text-[10px] text-slate-400 font-mono block uppercase">Teachers / Mentors</span>
+                  <p className="text-2xl font-bold font-mono text-indigo-400 mt-1">
+                    {reviews.filter(r => r.userType === 'teacher').length}
+                  </p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Academic evaluators</p>
+                </div>
+              </div>
+
+              {/* Filters Panel */}
+              <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                  
+                  {/* Filter Type */}
+                  <div className="flex flex-col gap-1 w-full sm:w-auto">
+                    <span className="text-[9px] text-slate-400 font-mono uppercase font-bold">Role Profile</span>
+                    <select
+                      value={reviewTypeFilter}
+                      onChange={(e) => setReviewTypeFilter(e.target.value as any)}
+                      className="bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="viewer">Viewer / Student</option>
+                      <option value="teacher">Teacher / Mentor</option>
+                    </select>
+                  </div>
+
+                  {/* Filter Rating */}
+                  <div className="flex flex-col gap-1 w-full sm:w-auto">
+                    <span className="text-[9px] text-slate-400 font-mono uppercase font-bold">Points Range</span>
+                    <select
+                      value={reviewRatingFilter}
+                      onChange={(e) => setReviewRatingFilter(e.target.value)}
+                      className="bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
+                    >
+                      <option value="all">All Ratings (1-10)</option>
+                      <option value="high">High Tier (8 - 10 ⭐)</option>
+                      <option value="medium">Average Tier (4 - 7 ⭐)</option>
+                      <option value="low">Critical Tier (1 - 3 ⭐)</option>
+                    </select>
+                  </div>
+
+                </div>
+
+                {/* Free Text Search */}
+                <div className="flex flex-col gap-1 w-full md:w-80">
+                  <span className="text-[9px] text-slate-400 font-mono uppercase font-bold">Text Query Search</span>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search feedback text contents..."
+                      value={reviewSearchText}
+                      onChange={(e) => setReviewSearchText(e.target.value)}
+                      className="w-full bg-slate-900 border border-white/10 focus:border-blue-500 focus:outline-none rounded-lg pl-9 pr-4 py-1.5 text-xs text-white font-mono placeholder:text-slate-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Reviews list */}
+              <div className="space-y-4">
+                {reviews.filter(r => {
+                  if (reviewTypeFilter !== 'all' && r.userType !== reviewTypeFilter) return false;
+                  if (reviewRatingFilter === 'high' && r.rating < 8) return false;
+                  if (reviewRatingFilter === 'medium' && (r.rating < 4 || r.rating > 7)) return false;
+                  if (reviewRatingFilter === 'low' && r.rating > 3) return false;
+                  if (reviewSearchText.trim()) {
+                    const q = reviewSearchText.toLowerCase();
+                    const text = `${r.experience} ${r.canBeChanged} ${r.futureExpectations} ${r.impact}`.toLowerCase();
+                    if (!text.includes(q)) return false;
+                  }
+                  return true;
+                }).length === 0 ? (
+                  <div className="text-center py-16 bg-white/[0.01] border border-white/5 rounded-2xl">
+                    <MessageSquare className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                    <p className="text-sm text-slate-400 font-medium">No anonymous reviews matching these search filters.</p>
+                    <p className="text-xs text-slate-500 mt-1">Adjust your points range filters or search text query query.</p>
+                  </div>
+                ) : (
+                  reviews
+                    .filter(r => {
+                      if (reviewTypeFilter !== 'all' && r.userType !== reviewTypeFilter) return false;
+                      if (reviewRatingFilter === 'high' && r.rating < 8) return false;
+                      if (reviewRatingFilter === 'medium' && (r.rating < 4 || r.rating > 7)) return false;
+                      if (reviewRatingFilter === 'low' && r.rating > 3) return false;
+                      if (reviewSearchText.trim()) {
+                        const q = reviewSearchText.toLowerCase();
+                        const text = `${r.experience} ${r.canBeChanged} ${r.futureExpectations} ${r.impact}`.toLowerCase();
+                        if (!text.includes(q)) return false;
+                      }
+                      return true;
+                    })
+                    .map((rev) => (
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        key={rev.id}
+                        className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/5 p-6 rounded-2xl space-y-4 transition-colors relative group"
+                      >
+                        {/* Header Details */}
+                        <div className="flex justify-between items-start gap-4 flex-wrap">
+                          <div className="flex items-center gap-3">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase border ${
+                              rev.userType === 'teacher'
+                                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                                : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                            }`}>
+                              {rev.userType === 'teacher' ? 'Teacher / Educator' : 'General Viewer / Student'}
+                            </span>
+                            
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {new Date(rev.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          {/* Ratings Display */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex gap-0.5 bg-slate-950/50 border border-white/5 px-3 py-1 rounded-full">
+                              {[...Array(10)].map((_, idx) => (
+                                <Star 
+                                  key={idx} 
+                                  className={`w-3 h-3 ${idx < rev.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-700'}`} 
+                                />
+                              ))}
+                              <span className="text-[11px] font-mono font-bold text-white pl-1.5">{rev.rating}/10</span>
+                            </div>
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => handleDeleteReview(rev.id!)}
+                              className="p-1.5 bg-white/5 hover:bg-red-500/15 hover:text-red-400 border border-white/5 rounded-lg text-slate-400 transition cursor-pointer opacity-0 group-hover:opacity-100"
+                              title="Delete anonymous review"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Detailed Responses Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                          
+                          {/* Q1 */}
+                          <div className="bg-slate-950/30 border border-white/5 p-4 rounded-xl space-y-1">
+                            <h4 className="text-[10px] font-bold font-mono text-blue-400 uppercase tracking-wider">
+                              • What was the experience?
+                            </h4>
+                            <p className="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                              {rev.experience}
+                            </p>
+                          </div>
+
+                          {/* Q2 */}
+                          <div className="bg-slate-950/30 border border-white/5 p-4 rounded-xl space-y-1">
+                            <h4 className="text-[10px] font-bold font-mono text-indigo-400 uppercase tracking-wider">
+                              • What can be changed?
+                            </h4>
+                            <p className="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                              {rev.canBeChanged}
+                            </p>
+                          </div>
+
+                          {/* Q3 */}
+                          <div className="bg-slate-950/30 border border-white/5 p-4 rounded-xl space-y-1">
+                            <h4 className="text-[10px] font-bold font-mono text-pink-400 uppercase tracking-wider">
+                              • What do you expect in the future?
+                            </h4>
+                            <p className="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                              {rev.futureExpectations}
+                            </p>
+                          </div>
+
+                          {/* Q4 */}
+                          <div className="bg-slate-950/30 border border-white/5 p-4 rounded-xl space-y-1">
+                            <h4 className="text-[10px] font-bold font-mono text-emerald-400 uppercase tracking-wider">
+                              • What's the impact?
+                            </h4>
+                            <p className="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                              {rev.impact}
+                            </p>
+                          </div>
+
+                        </div>
+                      </motion.div>
+                    ))
+                )}
               </div>
 
             </div>
