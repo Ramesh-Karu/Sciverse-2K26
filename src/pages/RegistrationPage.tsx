@@ -218,6 +218,10 @@ export default function RegistrationPage() {
           setErrorMessage('Students and teachers must be greater than zero.');
           return false;
         }
+        if (formData.expectedStudents > 50) {
+          setErrorMessage('School registration is limited to a maximum of 50 students per school.');
+          return false;
+        }
       } else if (step === 3) {
         if (!formData.principalName.trim() || !formData.teacherInCharge.trim() || !formData.teacherInChargeEmail.trim() || !formData.teacherInChargePhone.trim()) {
           setErrorMessage("Please enter Principal name, Teacher-in-Charge name, email, and phone number.");
@@ -730,11 +734,12 @@ export default function RegistrationPage() {
                                   type="number"
                                   required
                                   min={1}
-                                  max={100}
+                                  max={50}
                                   value={formData.expectedStudents}
                                   onChange={e => setFormData({...formData, expectedStudents: Number(e.target.value)})}
                                   className="w-full bg-slate-900/60 border border-white/10 focus:border-blue-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-white font-mono"
                                 />
+                                <p className="text-[10px] text-slate-500 mt-1">Maximum 50 students per school delegation.</p>
                               </div>
                               <div>
                                 <label className="block text-xs text-slate-400 mb-1">EXPECTED TEACHERS</label>
