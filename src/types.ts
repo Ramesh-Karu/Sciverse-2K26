@@ -46,6 +46,7 @@ export interface EventDay {
   reservedSeats: number;
   usedCapacity?: number;
   description?: string;
+  venue?: string;
   isOpenForRegistration?: boolean;
   reservedDetails?: {
     vips: number;

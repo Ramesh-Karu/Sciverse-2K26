@@ -827,55 +827,81 @@ export default function LandingPage() {
             </div>
 
             <div className="space-y-4">
-              {displayEventDays.map((day) => (
-                <div key={day.id} className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-3">
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                      <h4 className="text-sm font-bold text-white leading-snug">{day.name}</h4>
-                      <p className="text-[10px] text-blue-400 font-mono mt-0.5">{day.date}</p>
+              {displayEventDays.map((day) => {
+                const dayVenue = day.venue || (day.id === 'day-4' || day.id === 'day-5' || day.date?.includes('07-27') || day.date?.includes('07-28') ? 'Kilinochchi Maha Vidyalayam Premises' : 'Jaffna Hindu College Premises');
+                const isKilinochchi = dayVenue.includes('Kilinochchi');
+                return (
+                  <div key={day.id} className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <h4 className="text-sm font-bold text-white leading-snug">{day.name}</h4>
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
+                          <span className="text-[10px] text-blue-400 font-mono">{day.date}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border ${
+                            isKilinochchi 
+                              ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' 
+                              : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                          }`}>
+                            <MapPin className="w-3 h-3 text-amber-400" />
+                            {dayVenue}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`text-[9px] px-1.5 py-0.5 font-bold font-mono uppercase rounded shrink-0 ${
+                        day.isOpenForRegistration !== false 
+                          ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
+                          : 'bg-slate-500/10 text-slate-400 border border-white/10'
+                      }`}>
+                        {day.isOpenForRegistration !== false ? 'Open' : 'Launch Day'}
+                      </span>
                     </div>
-                    <span className={`text-[9px] px-1.5 py-0.5 font-bold font-mono uppercase rounded shrink-0 ${
-                      day.isOpenForRegistration !== false 
-                        ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
-                        : 'bg-slate-500/10 text-slate-400 border border-white/10'
-                    }`}>
-                      {day.isOpenForRegistration !== false ? 'Open' : 'Launch Day'}
-                    </span>
+                    
+                    {day.description && (
+                      <p className="text-xs text-slate-300 leading-relaxed bg-white/[0.02] p-2 rounded-lg border border-white/5 font-sans">
+                        {day.description}
+                      </p>
+                    )}
+                    
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>General Seating Capacity</span>
+                        <span className="font-mono text-white font-bold">{day.capacity} Seats</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>Seats Reserved / Registered</span>
+                        <span className="font-mono text-blue-400 font-bold">{day.combinedReserved || day.reservedSeats} / {day.capacity}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, ((day.combinedReserved || day.reservedSeats) / day.capacity) * 100)}%` }}></div>
+                      </div>
+                    </div>
                   </div>
-                  
-                  {day.description && (
-                    <p className="text-xs text-slate-300 leading-relaxed bg-white/[0.02] p-2 rounded-lg border border-white/5 font-sans">
-                      {day.description}
-                    </p>
-                  )}
-                  
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] text-slate-400">
-                      <span>General Seating Capacity</span>
-                      <span className="font-mono text-white font-bold">{day.capacity} Seats</span>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-slate-400">
-                      <span>Seats Reserved / Registered</span>
-                      <span className="font-mono text-blue-400 font-bold">{day.combinedReserved || day.reservedSeats} / {day.capacity}</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, ((day.combinedReserved || day.reservedSeats) / day.capacity) * 100)}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* QUICK CONTACTS */}
+            {/* QUICK CONTACTS & VENUES */}
             <div className="p-5 bg-white/5 border border-white/10 rounded-2xl space-y-4">
-              <h4 className="text-xs font-bold font-mono text-blue-400 uppercase tracking-wider">Science Union Secretariat</h4>
+              <h4 className="text-xs font-bold font-mono text-blue-400 uppercase tracking-wider">Event Venues & Secretariat</h4>
               
               <div className="space-y-3 text-xs text-slate-300">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-400 shrink-0" />
-                  <span>Jaffna Hindu College, Jaffna, Sri Lanka</span>
+                <div className="p-2.5 bg-slate-900/80 border border-white/5 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-[11px]">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Venue 1 (Days 1–3: July 22, 23 & 24)</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] pl-5">Jaffna Hindu College Premises, Jaffna</p>
                 </div>
-                <div className="flex items-center gap-2">
+
+                <div className="p-2.5 bg-slate-900/80 border border-amber-500/20 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-[11px]">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Venue 2 (Days 4–5: July 27 & 28)</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] pl-5">Kilinochchi Maha Vidyalayam Premises, Kilinochchi</p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
                   <Phone className="w-4 h-4 text-blue-400 shrink-0" />
                   <span>+94 77 420 1942</span>
                 </div>

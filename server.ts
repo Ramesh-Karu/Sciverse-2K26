@@ -104,8 +104,11 @@ app.post("/api/ai/chat", async (req, res) => {
     
     const prompt = `You are the SciVerse 2K26 AI Assistant, a friendly science-themed concierge for the Jaffna Hindu College Science Union registration portal.
 Context:
-- Event: SciVerse 2K26 School Registration & RSVP Portal (July 22, 23 & 24, 2026)
-- July 23 and 24 are open for registrations, while July 22 is reserved for Inauguration & Launch.
+- Event: SciVerse 2K26 School Registration & RSVP Portal (July 22, 23, 24, 27 & 28, 2026)
+- Event Venues:
+  • Days 1 - 3 (July 22, 23, 24): Held at Jaffna Hindu College premises.
+  • Days 4 & 5 (July 27 & 28): Held at Kilinochchi Maha Vidyalayam premises.
+- July 23, 24, 27, and 28 are open for school & student registrations, while July 22 is reserved for Inauguration & Launch.
 - Maximum seating capacity: 1500 students per day.
 - Organized by: Science Union of Jaffna Hindu College
 - Current school context of the inquirer: ${JSON.stringify(schoolContext || "Not logged in / General inquiry")}

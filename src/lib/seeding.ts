@@ -6,38 +6,64 @@ export async function seedInitialData() {
     // 1. Seed Event Days
     const daysColl = collection(db, 'eventDays');
     const daysSnap = await getDocs(daysColl);
-    const hasOldData = daysSnap.docs.some(doc => doc.data().date === '2026-10-15' || !doc.data().description);
-    if (daysSnap.empty || hasOldData) {
+    const hasOldData = daysSnap.docs.some(doc => doc.data().date === '2026-10-15' || !doc.data().description || !doc.data().venue);
+    const isMissingDays = daysSnap.docs.length < 5;
+    if (daysSnap.empty || hasOldData || isMissingDays) {
       const defaultDays = [
         { 
           id: 'day-1', 
           name: 'Day 1 - Inauguration & Launch (July 22)', 
           date: '2026-07-22', 
+          venue: 'Jaffna Hindu College Premises',
           capacity: 1500, 
           reservedSeats: 1500, 
           reservedDetails: { vips: 1500, judges: 0, organizers: 0, teachers: 0, media: 0, guests: 0 }, 
           isOpenForRegistration: false,
-          description: "Inaugural opening, guest keynote lectures by premier scientists, and the official launch of the SciVerse 26 Practical Campaign."
+          description: "Inaugural opening, guest keynote lectures by premier scientists, and the official launch of the SciVerse 26 Practical Campaign at Jaffna Hindu College premises."
         },
         { 
           id: 'day-2', 
           name: 'Day 2 - Exhibitions & Practical Labs (July 23)', 
           date: '2026-07-23', 
+          venue: 'Jaffna Hindu College Premises',
           capacity: 1500, 
           reservedSeats: 120, 
           reservedDetails: { vips: 30, judges: 20, organizers: 30, teachers: 20, media: 10, guests: 10 }, 
           isOpenForRegistration: true,
-          description: "Active Science Exhibitions & Practical Labs at the A/L Premises. Encouraging students to Experiment, Explore, and Excel through hand-on science campaigns."
+          description: "Active Science Exhibitions & Practical Labs at Jaffna Hindu College premises. Encouraging students to Experiment, Explore, and Excel through hands-on science campaigns."
         },
         { 
           id: 'day-3', 
           name: 'Day 3 - Competitions & Grand Finale (July 24)', 
           date: '2026-07-24', 
+          venue: 'Jaffna Hindu College Premises',
           capacity: 1500, 
           reservedSeats: 150, 
           reservedDetails: { vips: 50, judges: 25, organizers: 35, teachers: 20, media: 10, guests: 10 }, 
           isOpenForRegistration: true,
-          description: "Science Union final project competitions, innovative project evaluations, and the Grand Awards Ceremony to reward outstanding student creations."
+          description: "Science Union final project competitions, innovative project evaluations, and the Grand Awards Ceremony at Jaffna Hindu College premises."
+        },
+        { 
+          id: 'day-4', 
+          name: 'Day 4 - Kilinochchi Regional Exhibition & Practical Labs (July 27)', 
+          date: '2026-07-27', 
+          venue: 'Kilinochchi Maha Vidyalayam Premises',
+          capacity: 1500, 
+          reservedSeats: 100, 
+          reservedDetails: { vips: 20, judges: 15, organizers: 35, teachers: 20, media: 5, guests: 5 }, 
+          isOpenForRegistration: true,
+          description: "The event will be held at Kilinochchi Maha Vidyalayam premises on this day. Featuring regional science practical labs, interactive STEM stalls, and student model demonstrations."
+        },
+        { 
+          id: 'day-5', 
+          name: 'Day 5 - Kilinochchi Science Fair & Outreach Finale (July 28)', 
+          date: '2026-07-28', 
+          venue: 'Kilinochchi Maha Vidyalayam Premises',
+          capacity: 1500, 
+          reservedSeats: 100, 
+          reservedDetails: { vips: 20, judges: 15, organizers: 35, teachers: 20, media: 5, guests: 5 }, 
+          isOpenForRegistration: true,
+          description: "The event will be held at Kilinochchi Maha Vidyalayam premises on this day. Kilinochchi regional science fair, interactive competitions, and grand outreach closing ceremony."
         }
       ];
 
@@ -99,6 +125,13 @@ export async function seedInitialData() {
           content: 'Please ensure every participant downloads their customized SciVerse QR event pass. Digital or printed passes will be scanned at the security check-in gates for attendance tracking.',
           category: 'alert',
           createdAt: new Date(Date.now() - 86400000).toISOString()
+        },
+        {
+          id: 'ann-4',
+          title: 'Regional Expansion — Days 4 & 5 (July 27th & 28th)',
+          content: 'The SciVerse 2K26 event will be held at Kilinochchi Maha Vidyalayam premises on Day 4 and Day 5 (July 27th and 28th, 2026). Regional school delegations are warmly invited!',
+          category: 'info',
+          createdAt: new Date(Date.now() - 1800000).toISOString()
         }
       ];
 

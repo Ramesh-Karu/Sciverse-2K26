@@ -19,7 +19,7 @@ export default function RobotAssistant({ schoolContext }: RobotAssistantProps) {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: "Greetings! I am the SciVerse 2K26 AI Assistant. Ask me anything about registration, participant quotas, arrival slots, competition rules, or Jaffna Hindu College Science Union!",
+      text: "Greetings! I am the SciVerse 2K26 AI Assistant. Ask me anything about registration, participant quotas, venues (Jaffna Hindu College for Days 1-3 & Kilinochchi Maha Vidyalayam for Days 4-5), arrival slots, or competition rules!",
       timestamp: new Date()
     }
   ]);
